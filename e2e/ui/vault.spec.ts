@@ -26,8 +26,14 @@ async function login(page: Page): Promise<void> {
 	await page.goto('/apps/vpass/')
 }
 
+// Nextcloud inputs (NcTextField, NcPasswordField) put data-test on the <input> itself;
+// wrapper components like PasswordInput put it on their root element.
+function field(page: Page, id: string) {
+	return page.locator(`input[data-test="${id}"], [data-test="${id}"] input`).first()
+}
+
 async function unlock(page: Page, password = MASTER): Promise<void> {
-	await page.locator('[data-test="unlock-password"] input').fill(password)
+	await field(page, 'unlock-password').fill(password)
 	await page.locator('[data-test="unlock-submit"]').click()
 }
 
@@ -35,8 +41,8 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 	await login(page)
 
 	await test.step('create the vault and save the recovery key', async () => {
-		await page.locator('[data-test="master-password"] input').first().fill(MASTER)
-		await page.locator('[data-test="master-password-confirm"] input').fill(MASTER)
+		await field(page, 'master-password').fill(MASTER)
+		await field(page, 'master-password-confirm').fill(MASTER)
 		await page.locator('[data-test="create-vault"]').click()
 		await expect(page.locator('[data-test="recovery-key"]')).toHaveText(/^([A-Z2-7]{4}-){13}[A-Z2-7]{4}$/)
 		await page.getByText('I have saved my recovery key somewhere safe').click()
@@ -48,11 +54,11 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 	await test.step('add a login', async () => {
 		await page.locator('[data-test="new-item"] button').first().click()
 		await page.getByRole('menuitem', { name: 'Password' }).click()
-		await page.locator('[data-test="field-title"] input').fill('GitHub')
-		await page.locator('[data-test="field-username"] input').fill('alice@example.com')
-		await page.locator('[data-test="field-password"] input').first().fill('s3cret-Pa55word!')
+		await field(page, 'field-title').fill('GitHub')
+		await field(page, 'field-username').fill('alice@example.com')
+		await field(page, 'field-password').fill('s3cret-Pa55word!')
 		await page.getByRole('button', { name: 'Add website' }).click()
-		await page.locator('[data-test="field-url"] input').fill('https://github.com')
+		await field(page, 'field-url').fill('https://github.com')
 		await page.locator('[data-test="save-item"]').click()
 		await expect(page.getByRole('heading', { name: 'GitHub' })).toBeVisible()
 		await page.getByRole('button', { name: 'Show Password' }).click()
@@ -84,8 +90,10 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 		await expect(preview).toContainText('1 Credit cards')
 		await expect(preview).toContainText('1 Personal info')
 		await expect(preview).toContainText('wallet_address')
+		// The fixture's GitHub login matches the one added above (same host and username).
+		await expect(page.getByText('Skip 1 item that is already in your vault')).toBeVisible()
 		await page.locator('[data-test="confirm-import"]').click()
-		await expect(page.locator('[data-test="import-done"]')).toContainText('6 items were imported')
+		await expect(page.locator('[data-test="import-done"]')).toContainText('5 items were imported')
 		await page.locator('[data-test="nav-card"]').click()
 		await expect(page.getByText('Visa Gold')).toBeVisible()
 		await page.getByText('Visa Gold').click()

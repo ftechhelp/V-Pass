@@ -26,25 +26,21 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | `@vpass/core` unit tests (61) | ✅ passing (`npm test`) |
 | `tsc` (core, e2e) and `vue-tsc` (app) | ✅ clean |
 | Vite production build | ✅ builds `nextcloud-app/js/vpass-main.mjs` and `vpass-admin.mjs` |
-| PHP (`nextcloud-app/lib`, migration, PHPUnit tests) | ❌ **never linted or executed** |
-| API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ❌ **never executed** |
+| `make lint-php`, PHPUnit (28) | ✅ passing |
+| Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
+| Production install | ✅ v0.1.0 installed 2026-10-16 on the owner's Nextcloud (35.0.2, MariaDB 11.4). It shares this Docker host, so never touch containers outside the `vpass-dev` compose project without asking |
 
-**Why the gaps exist:**
-- There is no PHP on the host.
-- The Docker daemon was stopped and the user isn't in the `docker` group; fixing that needs sudo, and the owner chose to postpone it.
-- The PHP was written against Nextcloud 35 public APIs from memory, so expect first-run fixes.
+**Updating production** (only when the owner asks): back up the database first. Bump `<version>` in `appinfo/info.xml` and run `make appstore`. Replace `custom_apps/vpass` in the production container with `build/vpass` (`docker cp`, then `chown -R www-data:www-data`), then run `occ upgrade` so new migrations apply. Production has disabled apps with leftover background jobs, so `occ background-job:list` logs harmless "failed to create instance" warnings.
 
-**First run once Docker is up:**
+**Full verification run** (Docker works for the user now; run `npx playwright install chromium` once):
 1. `make install`
 2. `make lint-php`
 3. `make test-php`
 4. `make dev-up`
 5. `make test-api`
-6. `make e2e` (run `npx playwright install chromium` once before this step)
+6. `make e2e`
 7. `make zk-check`
-
-To use Docker after `sudo usermod -aG docker $USER` without logging in again, prefix commands with `sg docker -c '…'`.
 
 ## Commands
 
@@ -218,6 +214,10 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - **TypeScript ~5.9**: TS 7 is current, but vue-tsc compatibility is unverified.
   - Node 26 on the dev machine triggers harmless `EBADENGINE` warnings (Nextcloud packages declare Node 20–24).
   - npm 11 skips unapproved install scripts (such as esbuild's postinstall); the build still works.
+- **`data-test` on Nextcloud inputs:** `NcTextField` / `NcPasswordField` forward attributes to the `<input>` itself, not a wrapper. The spec's `field()` helper matches both shapes; plain `[data-test="x"] input` only works for wrapper components such as `PasswordInput`.
+- **First-run wizard:** Nextcloud's welcome modal covers the page for every new user, including the e2e throwaway users. `dev/setup.sh` disables `firstrunwizard` on the dev instance.
+- **PHPUnit and `nextcloud/ocp`:** the package has no autoload rules, so `composer.json` maps `OCP\` / `NCU\` in `autoload-dev`, and `doctrine/dbal` ^3.10 (the version bundled with Nextcloud 35) is a dev dependency for `IQueryBuilder`'s constants.
+- **e2e is ESM:** `e2e/package.json` sets `"type": "module"`; without it Playwright loads the specs as CommonJS and `import.meta` fails.
 - **libsodium types:** `libsodium-wrappers-sumo` 0.8 ships its own types. Don't add `@types/libsodium-wrappers-sumo`, which is now a stub.
 - **NordPass format:**
   - The column list was taken from Bitwarden's open-source NordPass importer.

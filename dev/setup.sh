@@ -17,6 +17,8 @@ occ status
 occ config:system:set debug --value=true --type=boolean
 occ config:system:set loglevel --value=0 --type=integer
 occ app:enable vpass
+# The welcome modal covers the page for every new user, including the e2e throwaway users.
+occ app:disable firstrunwizard || true
 
 for user in alice bob; do
 	if ! occ user:info "$user" >/dev/null 2>&1; then

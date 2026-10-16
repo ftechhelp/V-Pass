@@ -10,13 +10,16 @@
 	},
 	"autoload-dev": {
 		"psr-4": {
-			"OCA\\VPass\\Tests\\": "tests/"
+			"OCA\\VPass\\Tests\\": "tests/",
+			"OCP\\": "vendor/nextcloud/ocp/OCP/",
+			"NCU\\": "vendor/nextcloud/ocp/NCU/"
 		}
 	},
 	"require": {
 		"php": ">=8.2"
 	},
 	"require-dev": {
+		"doctrine/dbal": "^3.10",
 		"nextcloud/ocp": "dev-stable35",
 		"phpunit/phpunit": "^11.5"
 	},
