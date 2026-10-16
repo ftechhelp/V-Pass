@@ -63,7 +63,22 @@ Password manager: fills, saves and generates logins, and creates and uses passke
 | `contextMenus` | Adds "Fill login" and "Generate password" to the right-click menu of editable fields. |
 | `offscreen` | The service worker has no DOM, so a small offscreen document writes to the clipboard (generated passwords) and clears copied secrets after the configured delay. |
 | `scripting` | When the extension is installed or updated, adds its content scripts to tabs that are already open, so filling works there without a reload. It is not used for anything else. |
-| Host permission `<all_urls>` | A password manager must work on every site the user signs in to. The content script finds login, one-time-code, card and address fields so the user can choose what to fill. A page script answers the site's passkey requests from the vault after the user confirms. The extension also connects to the user's own Nextcloud server, whose address is only known once the user enters it. Page content and browsing history are never collected or transmitted. |
+
+**Host permission justification** (its own field; it covers `<all_urls>` and the content scripts' `http://*/*` and `https://*/*` matches):
+
+```
+V-Pass is a password manager, so it has to work on whichever sites the user signs in to. Those sites cannot be known in advance.
+
+Content scripts (http://*/* and https://*/*):
+- find login, one-time-code, payment card and address fields, so the user can choose what to fill (nothing is filled without a user action);
+- notice submitted logins, so V-Pass can offer to save or update them;
+- answer a site's passkey (WebAuthn) requests from the vault, only after the user confirms in a V-Pass window.
+All of this runs on the device. Page content and browsing history are never collected or sent anywhere.
+
+<all_urls>:
+- lets the extension sync the end-to-end encrypted vault with the user's own Nextcloud server, whose address is only known once the user enters it;
+- lets it add its content scripts to tabs that were already open when it was installed or updated.
+```
 
 **Remote code:** "No, I am not using remote code." All code ships in the package. The bundled libsodium WebAssembly runs under MV3's `wasm-unsafe-eval`; `eval` and remote scripts are not used.
 
@@ -76,7 +91,7 @@ Password manager: fills, saves and generates logins, and creates and uses passke
 - Leave everything else unticked: no browsing history, page content, location, communications or user activity is collected.
 - Tick all three certifications (not sold to third parties; not used for unrelated purposes; not used for creditworthiness or lending).
 
-**Privacy policy URL:** https://github.com/ftechhelp/V-Pass/blob/main/PRIVACY.md
+**Privacy policy URL:** 1
 
 ## Distribution tab
 
