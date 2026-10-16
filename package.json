@@ -1,0 +1,24 @@
+{
+  "name": "vpass-monorepo",
+  "private": true,
+  "description": "V-Pass: zero-knowledge password manager for Nextcloud",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "packages/*",
+    "nextcloud-app"
+  ],
+  "scripts": {
+    "build": "npm run build -w nextcloud-app",
+    "dev": "npm run dev -w nextcloud-app",
+    "test": "npm test -w @vpass/core",
+    "typecheck": "npm run typecheck -w @vpass/core && npm run typecheck -w nextcloud-app",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:api": "vitest run -c e2e/vitest.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5",
+    "@vpass/core": "*"
+  }
+}

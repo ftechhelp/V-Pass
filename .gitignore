@@ -1,0 +1,15 @@
+node_modules/
+/nextcloud-app/js/
+/nextcloud-app/css/*.css
+/nextcloud-app/vendor/
+/build/
+/e2e/test-results/
+/e2e/playwright-report/
+.phpunit.result.cache
+*.log
+.DS_Store
+# Never commit real vault exports
+*.vpass
+nordpass*.csv
+!packages/core/test/fixtures/*.csv
+/nextcloud-app/.phpunit.cache/

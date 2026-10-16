@@ -1,0 +1,12 @@
+name,url,additional_urls,username,password,note,cardholdername,cardnumber,cvc,pin,expirydate,zipcode,folder,full_name,phone_number,email,address1,address2,city,country,state,type,custom_fields
+GitHub,https://github.com/login,"[""https://gist.github.com"",""https://github.com/login""]",alice@example.com,c0rrect-H0rse!,,,,,,,,Work,,,,,,,,,password,"[{""label"":""Recovery codes"",""type"":""hidden"",""value"":""1111-2222""},{""label"":""Team"",""type"":""text"",""value"":""Core""}]"
+,example.org,,bob,"p,a""ss","line1
+line2",,,,,,,,,,,,,,,,password,
+Wi-Fi,,,,,"SSID: Home
+Key: ünïcødé 🔑",,,,,,,personal,,,,,,,,,note,
+Visa Gold,,,,,,Alice Example,4111 1111 1111 1111,123,4321,07/29,90210,Finance,,,,,,,,,credit_card,
+Me,,,,,Primary identity,,,,,,62701,,Alice Marie Example,+1 555 0100,alice@example.com,1 Main St,Apt 2,Springfield,US,IL,identity,
+Personal,,,,,,,,,,,,,,,,,,,,,folder,
+Empty Folder,,,,,,,,,,,,,,,,,,,,,folder,
+Something,,,,,,,,,,,,,,,,,,,,,wallet_address,
+Bank,https://bank.example,,carol,s3cret,,,,,,,,Finance,,,,,,,,,password,not json

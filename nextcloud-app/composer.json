@@ -1,0 +1,32 @@
+{
+	"name": "vpass/nextcloud-app",
+	"description": "V-Pass zero-knowledge password manager for Nextcloud (dev tooling only; Nextcloud autoloads lib/ itself)",
+	"type": "project",
+	"license": "AGPL-3.0-or-later",
+	"autoload": {
+		"psr-4": {
+			"OCA\\VPass\\": "lib/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\VPass\\Tests\\": "tests/"
+		}
+	},
+	"require": {
+		"php": ">=8.2"
+	},
+	"require-dev": {
+		"nextcloud/ocp": "dev-stable35",
+		"phpunit/phpunit": "^11.5"
+	},
+	"scripts": {
+		"lint": "find lib tests -name '*.php' -print0 | xargs -0 -n1 php -l",
+		"test": "phpunit -c tests/phpunit.xml"
+	},
+	"config": {
+		"sort-packages": true
+	},
+	"minimum-stability": "dev",
+	"prefer-stable": true
+}

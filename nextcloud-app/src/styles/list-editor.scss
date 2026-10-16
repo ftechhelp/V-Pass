@@ -1,0 +1,16 @@
+// Rows with a remove button, plus an "add" button (URLs, custom fields).
+.list-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+
+	&__row {
+		display: flex;
+		align-items: flex-end;
+		gap: 8px;
+
+		> :first-child {
+			flex: 1;
+		}
+	}
+}

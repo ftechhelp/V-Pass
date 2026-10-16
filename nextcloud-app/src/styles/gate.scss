@@ -1,0 +1,54 @@
+// Shared layout for the full-page setup / unlock screens.
+.gate {
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	min-height: 100%;
+	padding: 6vh 16px 40px;
+
+	&__card {
+		width: 100%;
+		max-width: 520px;
+		padding: 28px;
+		border-radius: var(--border-radius-container, 16px);
+		background: var(--color-main-background);
+		box-shadow: 0 2px 16px var(--color-box-shadow);
+	}
+
+	&__logo {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		margin-bottom: 18px;
+		color: var(--color-primary-element);
+		font-size: 1.6em;
+		font-weight: 700;
+	}
+
+	&__form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+
+		h2 {
+			margin: 0;
+			font-size: 1.4em;
+			text-align: center;
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+
+	&__hint {
+		color: var(--color-text-maxcontrast);
+		font-size: 0.9em;
+	}
+
+	&__links {
+		display: flex;
+		justify-content: center;
+	}
+}

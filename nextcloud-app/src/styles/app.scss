@@ -1,0 +1,31 @@
+@use './gate.scss';
+
+// Shared layout for single-column pages (generator, health, import, settings).
+.page {
+	max-width: 760px;
+	margin: 0 auto;
+	padding: 20px 20px 48px;
+
+	&--wide {
+		max-width: 980px;
+	}
+
+	&__title {
+		margin: 0 0 6px;
+		font-size: 1.6em;
+		font-weight: 700;
+
+		&--spaced {
+			margin-top: 36px;
+		}
+	}
+
+	&__intro {
+		color: var(--color-text-maxcontrast);
+		margin-bottom: 16px;
+	}
+
+	&__loading {
+		margin: 60px auto;
+	}
+}

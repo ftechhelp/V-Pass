@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>vpass</id>
+	<name>V-Pass</name>
+	<summary>Zero-knowledge password manager: passwords, passkeys, notes, cards and personal info</summary>
+	<description><![CDATA[V-Pass is an end-to-end encrypted password manager for your own Nextcloud.
+
+- Passwords, passkeys, secure notes, credit cards and personal info, organised in folders
+- Zero-knowledge: everything is encrypted in your browser with your master password. The server only stores ciphertext.
+- Unlock with your master password or a passkey (WebAuthn PRF), with a recovery key as a backup
+- Password generator, password health report and breach check (Have I Been Pwned, k-anonymity)
+- Built-in authenticator (TOTP) codes and encrypted file attachments
+- Import from NordPass, export to an encrypted backup or CSV
+]]></description>
+	<version>0.1.0</version>
+	<licence>agpl</licence>
+	<author mail="ftechhelp@gmail.com">V-Pass</author>
+	<namespace>VPass</namespace>
+	<category>security</category>
+	<dependencies>
+		<php min-version="8.2"/>
+		<nextcloud min-version="35" max-version="35"/>
+	</dependencies>
+	<background-jobs>
+		<job>OCA\VPass\BackgroundJob\PurgeTrash</job>
+	</background-jobs>
+	<settings>
+		<admin>OCA\VPass\Settings\Admin</admin>
+	</settings>
+	<navigations>
+		<navigation>
+			<name>Passwords</name>
+			<route>vpass.page.index</route>
+			<icon>app.svg</icon>
+		</navigation>
+	</navigations>
+</info>

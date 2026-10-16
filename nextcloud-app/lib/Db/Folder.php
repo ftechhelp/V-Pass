@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+namespace OCA\VPass\Db;
+
+use JsonSerializable;
+use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
+
+/**
+ * @method string getUuid()
+ * @method void setUuid(string $uuid)
+ * @method string getUserId()
+ * @method void setUserId(string $userId)
+ * @method string getWrappedKey()
+ * @method void setWrappedKey(string $wrappedKey)
+ * @method string getData()
+ * @method void setData(string $data)
+ * @method int getRevision()
+ * @method void setRevision(int $revision)
+ * @method int getCreatedAt()
+ * @method void setCreatedAt(int $createdAt)
+ * @method int getUpdatedAt()
+ * @method void setUpdatedAt(int $updatedAt)
+ */
+class Folder extends Entity implements JsonSerializable {
+	protected $uuid = '';
+	protected $userId = '';
+	protected $wrappedKey = '';
+	protected $data = '';
+	protected $revision = 0;
+	protected $createdAt = 0;
+	protected $updatedAt = 0;
+
+	public function __construct() {
+		$this->addType('uuid', Types::STRING);
+		$this->addType('userId', Types::STRING);
+		$this->addType('wrappedKey', Types::STRING);
+		$this->addType('data', Types::STRING);
+		$this->addType('revision', Types::INTEGER);
+		$this->addType('createdAt', Types::INTEGER);
+		$this->addType('updatedAt', Types::INTEGER);
+	}
+
+	public function jsonSerialize(): array {
+		return [
+			'id' => $this->uuid,
+			'wrappedKey' => $this->wrappedKey,
+			'data' => $this->data,
+			'revision' => $this->revision,
+			'createdAt' => $this->createdAt,
+			'updatedAt' => $this->updatedAt,
+		];
+	}
+}
