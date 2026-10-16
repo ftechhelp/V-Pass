@@ -37,9 +37,40 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | `make lint-php`, PHPUnit (28) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
-| Production install | ✅ v0.1.0 installed 2026-10-16 on the owner's Nextcloud (35.0.2, MariaDB 11.4). It shares this Docker host, so never touch containers outside the `vpass-dev` compose project without asking |
+| Production install | ✅ v0.1.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 and updated to 0.1.1 on 2026-10-16. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
-**Updating production** (only when the owner asks): back up the database first. Bump `<version>` in `appinfo/info.xml` and run `make appstore`. Replace `custom_apps/vpass` in the production container with `build/vpass` (`docker cp`, then `chown -R www-data:www-data`), then run `occ upgrade` so new migrations apply. Production has disabled apps with leftover background jobs, so `occ background-job:list` logs harmless "failed to create instance" warnings.
+**Ship every tested change to production (standing instruction from the owner).**
+- **When:** once a change is finished and its tests pass on the throwaway dev stack, update V-Pass on the owner's production Nextcloud so they can test it too. Don't wait to be asked.
+- **Never ship** a change whose tests fail, or one that was not tested on the dev stack.
+- **Scope:** the procedure touches only the `vpass` app.
+
+1. **Back up the database.**
+   - Run `mariadb-dump --single-transaction` in the `nextcloud-mariadb` container. Use its `MYSQL_ROOT_PASSWORD` env var without printing it.
+   - Write the dump to `~/backups/nextcloud-db-pre-vpass-<new version>-<timestamp>.sql.gz` with mode 600.
+   - Check that it ends with "Dump completed".
+2. **Check nothing else is pending.** `occ status` must show `maintenance: false` and `needsDbUpgrade: false`. Otherwise stop and ask: `occ upgrade` would also upgrade whatever else is pending.
+3. **Bump `<version>`** in `appinfo/info.xml`: patch for fixes, minor for features. This makes Nextcloud run new migrations and browsers drop the cached JS. Nextcloud never downgrades an app, so never reuse or lower a version.
+4. **Build:** `make appstore`.
+5. **Swap the app folder.**
+   - `docker cp build/vpass nextcloud:/tmp/vpass-new`.
+   - Inside the container: `chown -R www-data:www-data /tmp/vpass-new`, remove `/var/www/html/custom_apps/vpass`, then move `/tmp/vpass-new` into its place.
+6. **Upgrade:** run `occ upgrade` (`docker exec -u www-data nextcloud php occ upgrade`), then confirm the new version with `occ config:app:get vpass installed_version` and `occ app:list`.
+   - **Expected error at the end:** `Could not resolve OCP\AppFramework\Services\IAppConfig! Class can not be instantiated`.
+   - It is harmless and comes from production, not V-Pass. Production's *disabled* Mail and Talk apps have migrations that inject the app-scoped `IAppConfig`. Nextcloud 35's post-upgrade schema check replays disabled apps' migrations without their app container, so it fails after the real upgrade has finished.
+   - Rely on `installed_version` and step 7 instead of the exit code.
+7. **Verify.**
+   - `status.php` returns 200 through the public URL.
+   - `/index.php/apps/vpass/` redirects to the login page.
+   - `occ status` shows no maintenance mode.
+   - The Nextcloud log (`data/nextcloud.log`) has no new level ≥ 3 entries since the update.
+8. **Extension changes:** run `make extension` and ask the owner to click reload on V-Pass in `chrome://extensions`. The extension is not installed on the server.
+9. **Report to the owner:**
+   - the version deployed;
+   - what changed and what to test;
+   - the backup path;
+   - to roll back, restore the backup and the previous `build/vpass-<version>.tar.gz`.
+
+Production has disabled apps with leftover background jobs, so `occ background-job:list` logs harmless "failed to create instance" warnings.
 
 **Full verification run** (Docker works for the user now; run `npx playwright install chromium` once):
 1. `make install`

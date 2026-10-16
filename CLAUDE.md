@@ -9,4 +9,5 @@ All project guidance (architecture, commands, verification status, gotchas) is i
 ## Claude-specific notes
 
 - The original approved build plan is in `/home/vincent/.claude/plans/i-want-to-make-majestic-cat.md`. Its milestones were all drafted in the first session; see "Verification status" in AGENTS.md for what still needs to be run.
-- Docker commands need the user to start the daemon (`sudo`) first. Ask them instead of trying to work around it.
+- Docker works without `sudo` (the user is in the `docker` group). If the daemon is ever down, ask the user to start it rather than working around it.
+- **After every change that is finished and passes its tests on the throwaway dev stack, update V-Pass on the owner's production Nextcloud** so they can test it too. Follow "Ship every tested change to production" in AGENTS.md: back up first, bump the version, touch only the `vpass` app, verify, then report. This is a standing instruction from the owner (2026-10-16), so don't wait to be asked; never ship untested or failing changes. The production URL, container names and backup folder are in memory (`production-nextcloud`).
