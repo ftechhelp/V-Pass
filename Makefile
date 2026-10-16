@@ -7,7 +7,7 @@ COMPOSE     := docker compose -f dev/docker-compose.yml
 PHP_IMAGE   := composer:2
 OCC         := $(COMPOSE) exec -T -u www-data nextcloud php occ
 
-.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-down dev-reset dev-logs test-api e2e zk-check appstore extension test-extension e2e-extension clean
+.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-upgrade dev-down dev-reset dev-logs test-api e2e zk-check appstore extension extension-zip test-extension e2e-extension store-images clean
 
 help: ## Show this help
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ dev-up: build ## Start Nextcloud 35 on http://localhost:8080 with V-Pass enabled
 	$(COMPOSE) up -d
 	./dev/setup.sh
 
+dev-upgrade: ## Run occ upgrade on the dev instance (needed after bumping the app version)
+	$(OCC) upgrade
+
 dev-down: ## Stop the dev containers (data is kept)
 	$(COMPOSE) down
 
@@ -59,19 +62,25 @@ zk-check: ## Prove the server stores no plaintext (needs a populated dev instanc
 extension: ## Build the Chrome extension into browser-extension/dist (load it unpacked)
 	npm run build:extension
 
+extension-zip: extension ## Package the extension: build/vpass-extension-<version>.zip (Chrome Web Store) + the web app's download copy
+	node browser-extension/scripts/package.js
+
 test-extension: ## Extension unit tests: field detection, filling, save prompts, sender checks
 	npm run test:extension
 
-e2e-extension: extension ## Extension end-to-end tests in Chromium against the dev instance
+e2e-extension: extension-zip ## Extension end-to-end tests in Chromium against the dev instance
 	npm run e2e:extension
 
-appstore: build ## Package build/vpass-<version>.tar.gz for installing on a server
+store-images: extension ## Regenerate the Chrome Web Store screenshots in browser-extension/store/images (needs dev-up)
+	VPASS_STORE_IMAGES=1 npx playwright test -c e2e/playwright.extension.config.ts store-images
+
+appstore: build extension-zip ## Package build/vpass-<version>.tar.gz for installing on a server (includes the extension download)
 	rm -rf $(BUILD_DIR)/$(APP_ID)
 	mkdir -p $(BUILD_DIR)/$(APP_ID)
-	cp -r $(APP_DIR)/appinfo $(APP_DIR)/img $(APP_DIR)/js $(APP_DIR)/lib $(APP_DIR)/templates $(BUILD_DIR)/$(APP_ID)/
+	cp -r $(APP_DIR)/appinfo $(APP_DIR)/img $(APP_DIR)/js $(APP_DIR)/lib $(APP_DIR)/templates $(APP_DIR)/extension $(BUILD_DIR)/$(APP_ID)/
 	find $(BUILD_DIR)/$(APP_ID)/js -name '*.map' -delete
 	tar -czf $(BUILD_DIR)/$(APP_ID)-$(VERSION).tar.gz -C $(BUILD_DIR) $(APP_ID)
 	@echo "Created $(BUILD_DIR)/$(APP_ID)-$(VERSION).tar.gz"
 
 clean: ## Remove build output
-	rm -rf $(BUILD_DIR) $(APP_DIR)/js browser-extension/dist
+	rm -rf $(BUILD_DIR) $(APP_DIR)/js $(APP_DIR)/extension browser-extension/dist

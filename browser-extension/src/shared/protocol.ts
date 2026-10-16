@@ -154,6 +154,21 @@ export type Fido2Decision =
 	| { action: 'fallback' }
 	| { action: 'cancel' }
 
+/* ---------- the V-Pass web app's "Browser extension" page ---------- */
+
+export interface WebAppStatus {
+	version: string
+	connected: boolean
+	/** Connected to the Nextcloud this page belongs to (never which other server). */
+	thisServer: boolean
+	locked: boolean
+	/** A Nextcloud sign-in (Login Flow v2) is in progress. */
+	connecting: boolean
+}
+
+/** confirm: a V-Pass window asks the user; already / other-server / connecting: nothing to do. */
+export type WebAppConnectResult = 'confirm' | 'already' | 'other-server' | 'connecting'
+
 export type Fido2Result =
 	| { status: 'ok', response: RegistrationResponseJSON | AuthenticationResponseJSON }
 	| { status: 'fallback' }
@@ -207,6 +222,8 @@ export interface ContentMessages {
 	fido2Get: [{ requestId: string, options: RequestOptionsJSON, credentialId: string | null }, { status: 'pending' } | Fido2Result]
 	fido2Abort: [{ requestId: string }, void]
 	passkeyProvider: [object, boolean]
+	webAppStatus: [object, WebAppStatus]
+	webAppConnect: [object, { result: WebAppConnectResult }]
 }
 
 /** Commands the background sends to a content script frame. */

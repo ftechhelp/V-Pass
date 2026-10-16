@@ -29,6 +29,7 @@ import { isUnlocked, lock, setKeepUnlocked, unlock } from './session.ts'
 import { getSettings, neverSaveList, removeNeverSave, setSettings } from './settings.ts'
 import { local } from './storage.ts'
 import { clearVault, itemViews, sync } from './vault.ts'
+import { webAppConnect, webAppStatus } from './webapp.ts'
 
 type Sender = chrome.runtime.MessageSender
 type Handler<K extends MessageType> = (message: Request<K>, sender: Sender) => Promise<Response<K>> | Response<K>
@@ -161,6 +162,8 @@ const contentHandlers: Handlers<ContentMessages> = {
 	fido2Get: ({ requestId, options, credentialId }, sender) => handleGet(sender, requestId, options, credentialId),
 	fido2Abort: ({ requestId }, sender) => abort(sender, requestId),
 	passkeyProvider: async () => (await getSettings()).passkeyProvider,
+	webAppStatus: (_message, sender) => webAppStatus(sender),
+	webAppConnect: (_message, sender) => webAppConnect(sender),
 }
 
 /* ---------- dispatch ---------- */

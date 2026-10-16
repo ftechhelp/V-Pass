@@ -9,6 +9,7 @@ import { isUnlocked, lock, onLockChange } from './session.ts'
 import { getSettings, onSettingsChange } from './settings.ts'
 import { local } from './storage.ts'
 import { onVaultChange, sync } from './vault.ts'
+import { connectWindowClosed } from './webapp.ts'
 
 /*
  * Service worker entry. MV3 requires every listener to be registered
@@ -119,7 +120,10 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
 
 chrome.tabs.onActivated.addListener(({ tabId }) => void refreshBadge(tabId))
 
-chrome.windows.onRemoved.addListener((windowId) => void windowClosed(windowId))
+chrome.windows.onRemoved.addListener((windowId) => {
+	connectWindowClosed(windowId)
+	void windowClosed(windowId)
+})
 
 /* ---------- shortcuts and context menu ---------- */
 

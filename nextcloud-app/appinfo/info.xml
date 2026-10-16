@@ -13,7 +13,7 @@
 - Built-in authenticator (TOTP) codes and encrypted file attachments
 - Import from NordPass, export to an encrypted backup or CSV
 ]]></description>
-	<version>0.1.1</version>
+	<version>0.2.0</version>
 	<licence>agpl</licence>
 	<author mail="ftechhelp@gmail.com">V-Pass</author>
 	<namespace>VPass</namespace>

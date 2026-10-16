@@ -1,5 +1,6 @@
 import type { AuthenticationResponseJSON, AuthenticatorTransport as Transport, CreationOptionsJSON, RegistrationResponseJSON, RequestOptionsJSON } from '@vpass/core'
 import type { Fido2Result } from '../shared/protocol.ts'
+import { isVPassApp } from '../shared/vpass-app.ts'
 import type { ContentReply, PageMessage } from './page-protocol.ts'
 
 /**
@@ -13,7 +14,7 @@ import type { ContentReply, PageMessage } from './page-protocol.ts'
 (() => {
 	const FLAG = Symbol.for('vpass.webauthn-shim')
 	const scope = window as unknown as Record<symbol, boolean>
-	if (scope[FLAG] || !window.isSecureContext || typeof PublicKeyCredential === 'undefined' || !navigator.credentials) {
+	if (scope[FLAG] || !window.isSecureContext || typeof PublicKeyCredential === 'undefined' || !navigator.credentials || isVPassApp(location.pathname)) {
 		return
 	}
 	scope[FLAG] = true
@@ -26,6 +27,11 @@ import type { ContentReply, PageMessage } from './page-protocol.ts'
 	const define = Object.defineProperty
 	const create = Object.create
 	const PKC = PublicKeyCredential as unknown as Record<string, unknown>
+
+	/** Extensions V-Pass's authenticator can't provide: the site really wants them, so let the browser answer. */
+	const BROWSER_ONLY_EXTENSIONS = ['prf', 'largeBlob', 'hmacCreateSecret', 'hmacGetSecret', 'credBlob', 'getCredBlob', 'payment']
+	const needsBrowser = (extensions: unknown) =>
+		!!extensions && typeof extensions === 'object' && BROWSER_ONLY_EXTENSIONS.some((name) => name in extensions)
 
 	/* ---------- messaging ---------- */
 
@@ -274,14 +280,14 @@ import type { ContentReply, PageMessage } from './page-protocol.ts'
 	}
 
 	define(container, 'create', method(function create(options?: CredentialCreationOptions) {
-		if (!options?.publicKey || (options as { mediation?: string }).mediation === 'conditional') {
+		if (!options?.publicKey || (options as { mediation?: string }).mediation === 'conditional' || needsBrowser(options.publicKey.extensions)) {
 			return nativeCreate(options)
 		}
 		return vpassCreate(options)
 	}))
 
 	define(container, 'get', method(function get(options?: CredentialRequestOptions) {
-		if (!options?.publicKey) {
+		if (!options?.publicKey || needsBrowser(options.publicKey.extensions)) {
 			return nativeGet(options)
 		}
 		return vpassGet(options)

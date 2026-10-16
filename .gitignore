@@ -14,3 +14,4 @@ nordpass*.csv
 !packages/core/test/fixtures/*.csv
 /nextcloud-app/.phpunit.cache/
 /browser-extension/dist/
+/nextcloud-app/extension/

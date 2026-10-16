@@ -1,10 +1,12 @@
 import type { ContentCommand, ContentMessages, FieldKind, FrameForms, MessageMap } from '../shared/protocol.ts'
 import { send as runtimeSend } from '../shared/runtime.ts'
+import { isVPassApp } from '../shared/vpass-app.ts'
 import { WebAuthnBridge } from './bridge.ts'
 import { type Role, type Scan, fieldFor, isCardRole, isIdentityRole, scanFields, summarize } from './classify.ts'
 import { deepActiveElement, fillPayload, isFilling } from './fill.ts'
 import { Overlay } from './overlay.ts'
 import { watchSubmits } from './submit.ts'
+import { listenForWebApp } from './webapp.ts'
 
 /**
  * Isolated-world content script (every http(s) frame, from document_start).
@@ -35,6 +37,13 @@ import { watchSubmits } from './submit.ts'
 			if (!chrome.runtime?.id) teardown()
 			throw e
 		}
+	}
+
+	// On the V-Pass web app itself: no autofill, save prompts or passkeys (it would
+	// offer to store the master password); just answer its "Browser extension" page.
+	if (isVPassApp(location.pathname)) {
+		if (window === window.top) cleanups.push(listenForWebApp(send))
+		return
 	}
 
 	const bridge = new WebAuthnBridge(send)

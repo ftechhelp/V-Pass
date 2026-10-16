@@ -27,6 +27,7 @@
 			<button class="btn primary wide" type="submit" :disabled="!server.trim() || busy" data-test="connect">
 				<span v-if="busy" class="spinner" /> Connect
 			</button>
+			<p class="muted small">Tip: in V-Pass on your Nextcloud, <b>Browser extension → Connect this browser</b> does this for you.</p>
 		</form>
 	</div>
 </template>

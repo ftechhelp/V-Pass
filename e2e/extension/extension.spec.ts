@@ -1,5 +1,8 @@
 import { type Item, type LoginItem, decryptItem, initCrypto, parseTotp, totpCode, unlockWithPassword } from '@vpass/core'
 import type { Page } from '@playwright/test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { apiFor } from '../helpers.ts'
 import { BASE_URL, type Harness, LOGIN, MASTER, expect, extensionUrl, launch, openPopup, test, vpassFrame } from './fixtures.ts'
 
@@ -238,4 +241,49 @@ test('locks, offers to unlock in the field, and "keep unlocked" survives a brows
 	popup = await h.context.newPage()
 	await popup.goto(extensionUrl(h, 'popup/index.html'))
 	await expect(popup.locator('[data-test="unlock-form"]')).toBeVisible()
+})
+
+test('the web app\'s "Browser extension" page connects a fresh browser', async ({ harness: h }) => {
+	// A second browser profile with the extension installed but never connected.
+	const userDataDir = mkdtempSync(join(tmpdir(), 'vpass-ext-webapp-'))
+	const { context } = await launch(userDataDir)
+	try {
+		const app = await context.newPage()
+		await app.goto(`${BASE_URL}/login`)
+		await app.locator('input[name="user"]').fill(h.user.id)
+		await app.locator('input[name="password"]').fill(h.user.password)
+		await app.locator('button[type="submit"]').click()
+		await app.waitForURL((url) => !url.pathname.includes('/login'))
+		await app.goto(`${BASE_URL}/index.php/apps/vpass/`)
+		const master = app.locator('input[data-test="unlock-password"], [data-test="unlock-password"] input').first()
+		await master.click()
+		// The extension stays out of the V-Pass app itself: no icon or menu in the master password field.
+		await app.waitForTimeout(500)
+		expect(await app.locator('vpass-overlay').count()).toBe(0)
+		await master.fill(MASTER)
+		await app.locator('[data-test="unlock-submit"]').click()
+		await app.locator('[data-test="nav-extension"]').click()
+
+		await expect(app.locator('[data-test="extension-not-connected"]')).toBeVisible()
+		const download = await app.request.get(`${BASE_URL}/index.php/apps/vpass/extension/download`)
+		expect(download.status()).toBe(200)
+		expect(download.headers()['content-type']).toBe('application/zip')
+		expect((await download.body()).subarray(0, 2).toString()).toBe('PK')
+
+		const confirmOpened = context.waitForEvent('page')
+		await app.locator('[data-test="extension-connect"]').click()
+		const confirm = await confirmOpened
+		await expect(confirm.locator('[data-test="connect-confirm"]')).toContainText(new URL(BASE_URL).host)
+		const flowOpened = context.waitForEvent('page')
+		await confirm.locator('[data-test="connect-confirm-button"]').click()
+		const flow = await flowOpened
+		await flow.waitForLoadState()
+		await flow.getByRole('button', { name: 'Log in', exact: true }).click()
+		await flow.getByRole('button', { name: /grant access/i }).click()
+
+		await expect(app.locator('[data-test="extension-connected"]')).toBeVisible({ timeout: 30_000 })
+	} finally {
+		await context.close()
+		rmSync(userDataDir, { recursive: true, force: true })
+	}
 })

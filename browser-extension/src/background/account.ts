@@ -87,7 +87,12 @@ export async function startLoginFlow(serverInput: string, onConnected: () => Pro
 	if (!data.poll?.token || !data.poll.endpoint || !data.login) {
 		throw new Error(`${url.host} does not look like a Nextcloud server`)
 	}
-	const tab = await chrome.tabs.create({ url: data.login })
+	// Open the sign-in page in a normal browser window, even when asked from a V-Pass popup window.
+	const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null)
+	const tab = await chrome.tabs.create({ url: data.login, ...(win?.id !== undefined ? { windowId: win.id } : {}) })
+	if (win?.id !== undefined) {
+		chrome.windows.update(win.id, { focused: true }).catch(() => {})
+	}
 	const flow: LoginFlow = {
 		server,
 		endpoint: data.poll.endpoint,

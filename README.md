@@ -71,12 +71,16 @@ The extension uses the vault you created in the V-Pass web app. It talks to the 
 
 **Install** (Chrome, or another Chromium browser such as Edge or Brave):
 
-1. Run `make install` once, then `make extension`. This builds `browser-extension/dist`.
-2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `browser-extension/dist`.
-3. Click the V-Pass toolbar icon, enter your Nextcloud address and click **Connect**. Sign in to Nextcloud in the tab that opens and choose **Grant access**.
-4. Unlock with your master password.
+1. In V-Pass on your Nextcloud, open **Browser extension** in the navigation.
+2. Install the extension:
+   - Once V-Pass is in the Chrome Web Store: click **Add to Chrome**. Chrome then keeps it up to date.
+   - Until then: download it from that page, unzip it, and load it with **Developer mode → Load unpacked** in `chrome://extensions`. The page walks you through it.
+3. Back on that page, click **Connect this browser**, confirm in the V-Pass window, and choose **Grant access** on the Nextcloud page that opens.
+4. Unlock with your master password from the V-Pass toolbar icon.
 
-To update, pull the new code, run `make extension` again and click the reload button on V-Pass in `chrome://extensions`.
+You can also connect from the toolbar icon by typing your Nextcloud address.
+
+**For development:** `make extension` builds `browser-extension/dist`, which you can load unpacked directly; `npm run dev:extension` rebuilds it on change. `make extension-zip` makes the Chrome Web Store upload, `build/vpass-extension-<version>.zip`. Everything Google asks for (listing text, permission justifications, privacy answers, screenshots) is in [`browser-extension/store/`](browser-extension/store/LISTING.md), and the privacy policy is [`PRIVACY.md`](PRIVACY.md).
 
 **What it does:**
 - **Filling:** a V-Pass icon and menu appear in login, one-time-code, card and address fields. Logins also fill from the toolbar popup or with **Ctrl+Shift+L**. Logins only fill on the sites they are saved for. The extension asks before filling over plain http, or before sending card data to a frame from another site.
@@ -95,6 +99,8 @@ To update, pull the new code, run `make extension` again and click the reload bu
 | Nextcloud address and the extension's app password | `chrome.storage.local`. Revoke it in Nextcloud under *Settings → Security*, or click *Disconnect*. |
 | Your vault | Ciphertext only, as on the server, in `chrome.storage.local`. This lets filling work offline. |
 | The vault key | In memory and `chrome.storage.session`, which Chrome clears when it closes. It is also stored in `chrome.storage.local` while "Keep unlocked" is on. |
+
+**On the V-Pass web app itself,** the extension doesn't fill, save or handle passkeys, so it never offers to store your master password. It only answers the "Browser extension" page.
 
 **Protections on web pages:**
 - The field menu and the save bar are extension iframes inside a closed shadow root, so pages cannot read them.
@@ -131,7 +137,7 @@ Dev users:
 | `make test-api` | Black-box OCS API tests against the dev instance: concurrency 409s, tombstones, attachments, user isolation |
 | `make e2e` | Playwright: onboarding, add item, lock and unlock, NordPass import, passkey unlock (virtual authenticator with PRF) |
 | `make test-extension` | Extension unit tests (happy-dom): field detection, filling, submitted credentials, save-prompt decisions, message sender checks |
-| `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP, cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback and "keep unlocked" across restarts. |
+| `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP, cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback, "keep unlocked" across restarts, and the web app's "Browser extension" page connecting a fresh browser. |
 | `make zk-check` | Stores a sentinel string through the API, then greps the Postgres dump and Nextcloud's data folder. Any match fails the check. |
 
 For `make e2e`, run `npx playwright install chromium` once beforehand.

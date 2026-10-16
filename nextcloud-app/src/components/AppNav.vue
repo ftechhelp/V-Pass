@@ -64,6 +64,11 @@
 					<ImportIcon :size="20" />
 				</template>
 			</NcAppNavigationItem>
+			<NcAppNavigationItem :name="t('vpass', 'Browser extension')" :to="{ name: 'extension' }" data-test="nav-extension">
+				<template #icon>
+					<PuzzleIcon :size="20" />
+				</template>
+			</NcAppNavigationItem>
 			<NcAppNavigationItem :name="t('vpass', 'Trash')"
 				:to="{ name: 'trash' }"
 				:active="route.name === 'trash'">
@@ -110,6 +115,7 @@ import FolderIcon from 'vue-material-design-icons/FolderOutline.vue'
 import FolderPlusIcon from 'vue-material-design-icons/FolderPlus.vue'
 import ImportIcon from 'vue-material-design-icons/Import.vue'
 import LockIcon from 'vue-material-design-icons/Lock.vue'
+import PuzzleIcon from 'vue-material-design-icons/PuzzleOutline.vue'
 import ShieldCheckIcon from 'vue-material-design-icons/ShieldCheck.vue'
 import { confirmAction } from '../services/browser.ts'
 import { useSessionStore } from '../stores/session.ts'

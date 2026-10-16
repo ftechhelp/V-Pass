@@ -19,7 +19,10 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
   - (b) unlocking the vault with a passkey via the WebAuthn PRF extension.
 - **v1 includes** password health + HIBP, TOTP and attachments. **Sharing between users is out of v1**, but per-item keys keep that path open.
 - **Chrome extension:**
-  - Load-unpacked only; there is no Web Store packaging.
+  - **Distribution: the Chrome Web Store, unlisted** (owner's decision on 2026-10-16, replacing "load unpacked only").
+    - It's published under the owner's developer account. The owner uploads releases, unless they provide Chrome Web Store API credentials.
+    - The submission kit is `browser-extension/store/LISTING.md` plus `PRIVACY.md`.
+    - Until the listing exists, the web app's "Browser extension" page offers the zip for a manual install.
   - It unlocks with the master password.
   - The opt-in **"Keep unlocked on this device"** (with a warning) persists the vault key in `chrome.storage.local` until the user locks. This was the owner's explicit choice; keep the warning.
   - v1 covers login fill, save/update prompts, the generator, TOTP, cards and identities, and passkeys (create, sign in, conditional mediation).
@@ -31,13 +34,14 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | `@vpass/core` unit tests (80) | ✅ passing (`npm test`). The authenticator's output is verified with `@simplewebauthn/server` |
 | `tsc` (core, e2e) and `vue-tsc` (app, extension) | ✅ clean |
 | Extension unit tests (27, happy-dom) | ✅ passing (`make test-extension`) |
-| Extension end-to-end tests (10, Chromium + dev Nextcloud) | ✅ passing (`make e2e-extension`) |
+| Extension end-to-end tests (11, Chromium + dev Nextcloud), including the web app's "Browser extension" page connecting a fresh browser | ✅ passing (`make e2e-extension`) |
+| Chrome Web Store listing | ❌ not submitted yet. Waiting for the owner's developer account; then set `CHROME_WEB_STORE_URL` (see `browser-extension/store/LISTING.md`) |
 | Extension on real websites (webauthn.io, GitHub passkeys, real login forms) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
 | Vite production build | ✅ builds `nextcloud-app/js/vpass-main.mjs` and `vpass-admin.mjs` |
-| `make lint-php`, PHPUnit (28) | ✅ passing |
+| `make lint-php`, PHPUnit (31) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
-| Production install | ✅ v0.1.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 and updated to 0.1.1 on 2026-10-16. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
+| Production install | ✅ v0.2.0 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
 **Ship every tested change to production (standing instruction from the owner).**
 - **When:** once a change is finished and its tests pass on the throwaway dev stack, update V-Pass on the owner's production Nextcloud so they can test it too. Don't wait to be asked.
@@ -49,8 +53,11 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
    - Write the dump to `~/backups/nextcloud-db-pre-vpass-<new version>-<timestamp>.sql.gz` with mode 600.
    - Check that it ends with "Dump completed".
 2. **Check nothing else is pending.** `occ status` must show `maintenance: false` and `needsDbUpgrade: false`. Otherwise stop and ask: `occ upgrade` would also upgrade whatever else is pending.
-3. **Bump `<version>`** in `appinfo/info.xml`: patch for fixes, minor for features. This makes Nextcloud run new migrations and browsers drop the cached JS. Nextcloud never downgrades an app, so never reuse or lower a version.
-4. **Build:** `make appstore`.
+3. **Bump `<version>`** in `appinfo/info.xml`: patch for fixes, minor for features.
+   - This makes Nextcloud run new migrations and browsers drop the cached JS.
+   - Nextcloud never downgrades an app, so never reuse or lower a version.
+   - The dev instance mounts the same folder, so it now needs `make dev-upgrade`; otherwise it answers 503.
+4. **Build:** `make appstore`. This also packages the extension (`make extension-zip`) into the app, for the web app's download.
 5. **Swap the app folder.**
    - `docker cp build/vpass nextcloud:/tmp/vpass-new`.
    - Inside the container: `chown -R www-data:www-data /tmp/vpass-new`, remove `/var/www/html/custom_apps/vpass`, then move `/tmp/vpass-new` into its place.
@@ -63,7 +70,11 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
    - `/index.php/apps/vpass/` redirects to the login page.
    - `occ status` shows no maintenance mode.
    - The Nextcloud log (`data/nextcloud.log`) has no new level ≥ 3 entries since the update.
-8. **Extension changes:** run `make extension` and ask the owner to click reload on V-Pass in `chrome://extensions`. The extension is not installed on the server.
+8. **Extension changes.**
+   1. Bump `version` in `browser-extension/public/manifest.json`. The Chrome Web Store rejects an upload whose version isn't higher than the last one.
+   2. `make appstore` (step 4) puts the new zip into the web app's download.
+   3. Hand over `build/vpass-extension-<version>.zip` for the Chrome Web Store: the owner uploads it under *Package → Upload new package* and submits it for review. Use the Web Store API instead if credentials have been set up.
+   4. Before review finishes, the owner can test right away with the unpacked `browser-extension/dist` (reload it in `chrome://extensions`).
 9. **Report to the owner:**
    - the version deployed;
    - what changed and what to test;
@@ -97,6 +108,9 @@ npm run dev                      # rebuild the UI on change
 npm run build:extension          # Chrome extension → browser-extension/dist (load unpacked)
 npm run dev:extension            # rebuild the extension on change, then reload it in chrome://extensions
 npm run test:extension           # extension unit tests (vitest + happy-dom)
+make extension-zip               # build/vpass-extension-<version>.zip for the Chrome Web Store (+ the web app's download copy)
+make store-images                # regenerate the Chrome Web Store screenshots (dev instance must be up)
+make dev-upgrade                 # occ upgrade on the dev instance, needed after an app version bump
 make help                        # all make targets
 ```
 
@@ -227,6 +241,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - The panel appears in the **Security** admin section.
   - The effective attachment limit is capped by PHP's `upload_max_filesize` and `post_max_size`.
 - **`DELETE /vault`** has `#[PasswordConfirmationRequired]`, and the web UI calls `confirmPassword()` first. Behaviour for Basic-auth API clients is untested.
+- **Extension download:** `ExtensionController` (logged-in users) streams `extension/vpass-extension.zip`, and `ExtensionPackage` validates `extension/extension.json`. Both files are written by `make extension-zip`, gitignored, and shipped by `make appstore`. Without them, the download returns 404 and the page says so.
 - **Background job:** `PurgeTrash` runs daily and deletes trash older than the retention setting. Deleting a Nextcloud user wipes their vault (`UserDeletedListener`).
 
 ### Web app (`nextcloud-app/src`)
@@ -245,6 +260,10 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - `@nextcloud/vite-config` reads the app id from `appinfo/info.xml` and emits `js/vpass-main.mjs` and `js/vpass-admin.mjs`.
   - `inlineCSS: { relativeCSSInjection: true }` makes each entry inject its own CSS, so PHP only needs `Util::addScript()`.
   - Initial-state keys: `config` (main app) and `admin-settings`.
+- **"Browser extension" page** (`views/ExtensionView.vue`, `services/extension.ts`):
+  - It talks to the extension with `window.postMessage`: `{ vpass: 'webapp', kind: 'status' | 'connect' }` goes out, and `{ vpass: 'extension', … }` comes back.
+  - It shows install, connect and update state.
+  - **`CHROME_WEB_STORE_URL`** stays empty until Google approves the listing. While it's empty, the page offers the bundled zip (`config.extensionVersion`, downloaded from `/apps/vpass/extension/download`) with load-unpacked steps.
 - **Playwright selectors:** `data-test="…"` attributes are what the Playwright tests select on. Keep them when refactoring.
 - **Translations:** user-facing strings use `t('vpass', …)` / `n(...)`. No translation files exist yet.
 
@@ -302,6 +321,14 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - Cross-origin iframes, `mediation: 'conditional'` create, and unsupported algorithms all fall back to the browser.
   - Get requests while unlocked with no matching passkey fall back immediately, without a window.
   - Conditional mediation: the pending request shows passkeys in the inline menu. Picking one creates a 60 s one-time **grant** (`consumeGrant`) that the frame's `fido2Get` must present, so a page can't get silent assertions.
+- **The V-Pass web app itself** (`shared/vpass-app.ts`, any `…/apps/vpass/` path) is special-cased.
+  - The content script runs only the web-app bridge (`content/webapp.ts`): no autofill and no save prompts, which would offer to store the master password.
+  - The MAIN-world shim doesn't wrap WebAuthn there, so the app's PRF unlock reaches Chrome.
+  - `webAppStatus` / `webAppConnect` (`background/webapp.ts`) accept only a top-frame https or localhost V-Pass page.
+  - The page learns only the version and whether the extension is connected to *this* server.
+  - Connecting opens the prompt window in `#connect=<server>` mode; the user confirms there before Login Flow v2 starts.
+  - Nothing happens if the extension is already connected.
+- **Passkey requests that need PRF, largeBlob, hmac-secret or credBlob** go straight to the browser, because V-Pass's authenticator can't provide them.
 - **Save prompts** (`background/save.ts`): `classifySubmission` decides new / update / nothing. The prompt is kept per tab for 5 minutes, and the next page load asks for it (`pendingSaveBar`). Prompts appear only while unlocked.
 
 ## Gotchas found so far
@@ -343,6 +370,8 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **Field-detection traps:**
   - `<label>` text includes nested `<option>` text ("United States" read as a state field). `labelText()` skips nested controls.
   - "MM/YY" contains "mm", so check the combined expiry pattern before month/year.
+- **Version bumps affect the dev instance too:** it mounts `nextcloud-app/`, so after bumping `info.xml` it answers 503 until `make dev-upgrade`.
+- **Store images:** on this machine `system-ui` resolves to a monospace font (Adwaita Mono). `store-images.spec.ts` injects a generic `sans-serif` and serves the fictional `https://mail.northwind.example` through `context.route`, so no real site or port shows up.
 - **Nextcloud 36:** `appinfo/info.xml` caps `max-version` at 35, so it must be bumped for Nextcloud 36.
 
 ## Not done yet (known follow-ups)
@@ -356,13 +385,13 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - l10n files.
 
 **Extension follow-ups:**
+- Submit to the Chrome Web Store (owner's account), then set `CHROME_WEB_STORE_URL`. Optionally automate uploads with the Chrome Web Store API.
 - Try it on real sites and tune `classify.ts`.
 - Passkeys in cross-origin iframes.
 - Save prompts while locked (unlock, then save).
 - The PRF/largeBlob extensions for sites.
 - EdDSA keys (for imported passkeys).
 - Firefox port.
-- Web Store packaging, if the owner ever wants it.
 - Moving the web store onto core's `VaultCache`.
 
 **Roadmap:**

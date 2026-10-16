@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\VPass\Controller;
 
 use OCA\VPass\AppInfo\Application;
+use OCA\VPass\Service\ExtensionPackage;
 use OCA\VPass\Service\SettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -21,6 +22,7 @@ class PageController extends Controller {
 		IRequest $request,
 		private IInitialState $initialState,
 		private SettingsService $settings,
+		private ExtensionPackage $extension,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -34,6 +36,8 @@ class PageController extends Controller {
 			'hibpEnabled' => $this->settings->hibpEnabled(),
 			'maxAttachmentBytes' => $this->settings->maxAttachmentBytes(),
 			'trashRetentionDays' => $this->settings->trashRetentionDays(),
+			// Version of the browser extension this server offers for download (null: none bundled).
+			'extensionVersion' => $this->extension->version(),
 		]);
 
 		$response = new TemplateResponse(Application::APP_ID, 'main');

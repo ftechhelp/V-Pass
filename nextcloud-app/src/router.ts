@@ -15,6 +15,7 @@ export const router = createRouter({
 		{ path: '/health', name: 'health', component: () => import('./views/HealthView.vue') },
 		{ path: '/import', name: 'import', component: () => import('./views/ImportExportView.vue') },
 		{ path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+		{ path: '/extension', name: 'extension', component: () => import('./views/ExtensionView.vue') },
 		{ path: '/:pathMatch(.*)*', redirect: '/vault/all' },
 	],
 })

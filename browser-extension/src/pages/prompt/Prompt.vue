@@ -3,6 +3,26 @@
 		<div v-if="loading" class="center"><span class="spinner" /></div>
 		<p v-else-if="error" class="note error">{{ error }}</p>
 
+		<!-- Connect, asked by the V-Pass web app's "Browser extension" page -->
+		<div v-else-if="connectServer" class="stack" data-test="connect-confirm">
+			<div class="stack head">
+				<ShieldLockIcon :size="40" class="brand" />
+				<h1>Connect V-Pass?</h1>
+				<p class="muted">to <b>{{ connectHost }}</b></p>
+			</div>
+			<p v-if="state && state.status !== 'disconnected' && state.status !== 'connecting'" class="note">
+				V-Pass is already connected to {{ state.server }}.
+			</p>
+			<template v-else>
+				<p>V-Pass opens Nextcloud's sign-in page for this server. Choose <b>Grant access</b> there, then unlock V-Pass from the toolbar.</p>
+				<p class="muted small">Only continue if you just clicked "Connect this browser" in V-Pass on {{ connectHost }}.</p>
+				<button class="btn primary wide" :disabled="busy" data-test="connect-confirm-button" @click="confirmConnect">
+					<span v-if="busy" class="spinner" /> Connect
+				</button>
+			</template>
+			<button class="btn link" @click="closeWindow">Cancel</button>
+		</div>
+
 		<!-- Unlock (standalone, or before answering a passkey request) -->
 		<UnlockForm v-else-if="needsUnlock && state" :user="state.user" :server="state.server" :keep-unlocked="state.keepUnlocked" @unlocked="afterUnlock" />
 
@@ -67,6 +87,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import FingerprintIcon from 'vue-material-design-icons/Fingerprint.vue'
+import ShieldLockIcon from 'vue-material-design-icons/ShieldLock.vue'
 import type { ExtensionState, Fido2Decision, Fido2Details } from '../../shared/protocol.ts'
 import { send } from '../../shared/runtime.ts'
 import UnlockForm from '../ui/UnlockForm.vue'
@@ -74,6 +95,8 @@ import UnlockForm from '../ui/UnlockForm.vue'
 const NEW_LOGIN = '__new__'
 const hash = location.hash.slice(1)
 const unlockOnly = hash === 'unlock'
+const connectServer = hash.startsWith('connect=') ? decodeURIComponent(hash.slice('connect='.length)) : null
+const connectHost = connectServer ? new URL(connectServer).host : ''
 
 const loading = ref(true)
 const error = ref('')
@@ -81,7 +104,7 @@ const state = ref<ExtensionState | null>(null)
 const details = ref<Fido2Details | null>(null)
 const target = ref(NEW_LOGIN)
 const busy = ref(false)
-const needsUnlock = computed(() => unlockOnly || state.value?.status !== 'unlocked')
+const needsUnlock = computed(() => !connectServer && (unlockOnly || state.value?.status !== 'unlocked'))
 const host = computed(() => details.value ? new URL(details.value.origin).host : '')
 let heartbeat: ReturnType<typeof setInterval> | undefined
 
@@ -89,6 +112,9 @@ async function load(): Promise<void> {
 	loading.value = true
 	try {
 		state.value = await send('state')
+		if (connectServer) {
+			return
+		}
 		if (state.value.status === 'disconnected' || state.value.status === 'connecting') {
 			error.value = 'Connect V-Pass to your Nextcloud first (click the V-Pass toolbar icon).'
 			return
@@ -112,6 +138,21 @@ async function afterUnlock(next: ExtensionState): Promise<void> {
 		return
 	}
 	await load()
+}
+
+function closeWindow(): void {
+	window.close()
+}
+
+async function confirmConnect(): Promise<void> {
+	busy.value = true
+	try {
+		await send('connect', { server: connectServer! })
+		window.close()
+	} catch (e) {
+		error.value = (e as Error).message
+		busy.value = false
+	}
 }
 
 async function decide(decision: Fido2Decision): Promise<void> {
