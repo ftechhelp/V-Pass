@@ -190,9 +190,20 @@ export const useVaultStore = defineStore('vault', () => {
 		loaded.value = false
 	}
 
+	/**
+	 * Record the revision of one of our own writes. Only advance when nothing can
+	 * have been missed; otherwise the next sync fetches the gap (changes another
+	 * device made in between).
+	 */
+	function advanceRevision(rev: number): void {
+		if (rev === revision.value + 1) {
+			revision.value = rev
+		}
+	}
+
 	function track(record: ItemRecord): VaultEntry {
 		putEntry(record)
-		revision.value = Math.max(revision.value, record.revision)
+		advanceRevision(record.revision)
 		notify()
 		return entries.value.get(record.id)!
 	}
@@ -238,7 +249,7 @@ export const useVaultStore = defineStore('vault', () => {
 	async function deleteItem(id: string): Promise<void> {
 		const { revision: rev } = await api.deleteItem(id)
 		removeEntry(id)
-		revision.value = Math.max(revision.value, rev)
+		advanceRevision(rev)
 		notify()
 	}
 
@@ -302,7 +313,7 @@ export const useVaultStore = defineStore('vault', () => {
 			})
 			const res = await api.createItems(chunk)
 			res.items.forEach(putEntry)
-			revision.value = Math.max(revision.value, res.revision)
+			advanceRevision(res.revision)
 			done += chunk.length
 			onProgress?.(done, imported.length)
 			notify()
@@ -344,7 +355,7 @@ export const useVaultStore = defineStore('vault', () => {
 		const enc = encryptAttachment(itemKey, id, content, { name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size })
 		const record = await api.uploadAttachment(itemId, enc)
 		attachments.value.set(record.id, record)
-		revision.value = Math.max(revision.value, record.revision)
+		advanceRevision(record.revision)
 		notify()
 	}
 
@@ -379,7 +390,7 @@ export const useVaultStore = defineStore('vault', () => {
 		const { revision: rev } = await api.deleteAttachment(id)
 		attachments.value.delete(id)
 		attachmentMetaCache.delete(id)
-		revision.value = Math.max(revision.value, rev)
+		advanceRevision(rev)
 		notify()
 	}
 

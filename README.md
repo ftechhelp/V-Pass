@@ -11,6 +11,7 @@ A zero-knowledge password manager that runs as an app inside your own Nextcloud.
   - built-in 2FA (TOTP) codes
   - encrypted file attachments
 - **Import and export:** import from NordPass. Export to an encrypted `.vpass` backup or to CSV.
+- **Chrome extension:** fills logins, one-time codes, cards and addresses; offers to save new logins and changed passwords; generates passwords; and stores and uses website passkeys from the vault.
 
 ## Security model
 
@@ -34,8 +35,8 @@ VK ─wraps─▶ per-item key ─XChaCha20-Poly1305─▶ item JSON (type, titl
 - **Passkeys:** the per-item key design leaves room for sharing between users later; each user would get an X25519 key pair.
 
 **Known limits:**
-- **The web app trusts the JavaScript that your server sends.** A compromised server could ship modified code. This is the same trade-off as any web vault, Bitwarden's included. The planned browser extension and desktop client will ship their own code.
-- **Signing in to websites with a stored passkey needs the browser extension.** A web page cannot answer another site's passkey prompt.
+- **The web app trusts the JavaScript that your server sends.** A compromised server could ship modified code. This is the same trade-off as any web vault, Bitwarden's included. The Chrome extension ships its own code, so it does not have this problem.
+- **Signing in to websites with a stored passkey needs the Chrome extension.** A web page cannot answer another site's passkey prompt.
 - **HTTPS is required.** Browsers disable WebCrypto and WebAuthn on plain HTTP.
 
 ## Repository layout
@@ -44,7 +45,8 @@ VK ─wraps─▶ per-item key ─XChaCha20-Poly1305─▶ item JSON (type, titl
 |---|---|
 | `packages/core` | `@vpass/core`: crypto, item schemas, NordPass importer, exporters, generator, TOTP, HIBP, health, typed API client. Framework-free, so the browser extension and desktop client can reuse it. |
 | `nextcloud-app` | The Nextcloud app (`appinfo/`, `lib/` PHP, `src/` Vue 3 UI, `templates/`). Installed as `custom_apps/vpass`. |
-| `e2e` | API integration tests (vitest), browser tests (Playwright) and the zero-knowledge check. |
+| `browser-extension` | The Chrome extension (Manifest V3, Vue 3). Built into `browser-extension/dist`, which you load unpacked. |
+| `e2e` | API integration tests (vitest), browser tests (Playwright), the extension's end-to-end tests and the zero-knowledge check. |
 | `dev` | Docker Compose setup for a local Nextcloud 35 with Postgres and Redis. |
 
 ## Install on your Nextcloud (35)
@@ -62,6 +64,42 @@ sudo -u www-data php occ app:enable vpass
 ```
 
 **Check your PHP upload limits.** `upload_max_filesize` and `post_max_size` must be at least as large as the attachment limit, which defaults to 50 MB. You can change that limit, the HIBP toggle and trash retention under *Administration settings → Security → V-Pass*.
+
+## Chrome extension
+
+The extension uses the vault you created in the V-Pass web app. It talks to the same API with its own app password, and it decrypts everything locally with your master password.
+
+**Install** (Chrome, or another Chromium browser such as Edge or Brave):
+
+1. Run `make install` once, then `make extension`. This builds `browser-extension/dist`.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `browser-extension/dist`.
+3. Click the V-Pass toolbar icon, enter your Nextcloud address and click **Connect**. Sign in to Nextcloud in the tab that opens and choose **Grant access**.
+4. Unlock with your master password.
+
+To update, pull the new code, run `make extension` again and click the reload button on V-Pass in `chrome://extensions`.
+
+**What it does:**
+- **Filling:** a V-Pass icon and menu appear in login, one-time-code, card and address fields. Logins also fill from the toolbar popup or with **Ctrl+Shift+L**. Logins only fill on the sites they are saved for. The extension asks before filling over plain http, or before sending card data to a frame from another site.
+- **Saving:** after you sign in, change a password or sign up, a bar offers to save the login or update the stored password. The old password stays in the item's history.
+- **Generator:** "Generate password" appears in the menu on sign-up and change-password fields, and in the popup. **Ctrl+Shift+9** fills the focused field, or copies the password if no field is focused.
+- **Passkeys:** when a site creates a passkey, V-Pass offers to save it in the vault, either to a matching login or to a new one. Signing in uses it from a small V-Pass window, or from the field menu on sites that offer passkey autofill. **Use another device or security key** always hands the request back to Chrome, so your phone, security keys and Google Password Manager keep working. Saved passkeys also show up under *Passkeys* in the web app.
+
+**Locking:**
+- By default the vault locks when Chrome closes, after 15 minutes of computer inactivity, and when the computer locks. You can change these times in the extension's settings.
+- **Keep unlocked on this device** (a checkbox on the unlock screen, off by default) keeps the vault unlocked across restarts until you lock it. It stores the vault key in the Chrome profile, so anyone who can use your computer account or copy the profile can open the vault. Only use it on a device that only you use.
+
+**What the extension stores:**
+
+| Data | Where |
+|---|---|
+| Nextcloud address and the extension's app password | `chrome.storage.local`. Revoke it in Nextcloud under *Settings → Security*, or click *Disconnect*. |
+| Your vault | Ciphertext only, as on the server, in `chrome.storage.local`. This lets filling work offline. |
+| The vault key | In memory and `chrome.storage.session`, which Chrome clears when it closes. It is also stored in `chrome.storage.local` while "Keep unlocked" is on. |
+
+**Protections on web pages:**
+- The field menu and the save bar are extension iframes inside a closed shadow root, so pages cannot read them.
+- They ignore clicks unless Chrome confirms they are fully visible, which defeats invisible-overlay clickjacking.
+- Websites never get to choose which origin a request counts as.
 
 ## Development
 
@@ -92,6 +130,8 @@ Dev users:
 | `make lint-php` / `make test-php` | PHP syntax check and PHPUnit service tests, run in Docker |
 | `make test-api` | Black-box OCS API tests against the dev instance: concurrency 409s, tombstones, attachments, user isolation |
 | `make e2e` | Playwright: onboarding, add item, lock and unlock, NordPass import, passkey unlock (virtual authenticator with PRF) |
+| `make test-extension` | Extension unit tests (happy-dom): field detection, filling, submitted credentials, save-prompt decisions, message sender checks |
+| `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP, cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback and "keep unlocked" across restarts. |
 | `make zk-check` | Stores a sentinel string through the API, then greps the Postgres dump and Nextcloud's data folder. Any match fails the check. |
 
 For `make e2e`, run `npx playwright install chromium` once beforehand.
@@ -147,7 +187,7 @@ The OCS API lives at `/ocs/v2.php/apps/vpass/api/v1`.
 
 ## Roadmap
 
-- **Browser extension:** autofill, saving logins, and a WebAuthn authenticator that uses the stored passkeys.
+- **Browser extension for Firefox,** and passkeys inside cross-origin iframes (for now the extension hands those to the browser).
 - **Desktop client.**
 - **Sharing items and folders** between Nextcloud users.
 - **Emergency access.**

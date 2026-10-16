@@ -5,6 +5,7 @@
   "description": "Shared V-Pass logic: crypto, item model, importers, tools and API client. Used by the Nextcloud app, browser extension and desktop client.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },
@@ -19,9 +20,11 @@
     "@zxcvbn-ts/language-en": "^4.1.1",
     "libsodium-wrappers-sumo": "^0.8.4",
     "papaparse": "^5.7.0",
+    "tldts": "^7.4.18",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@simplewebauthn/server": "^14.0.3",
     "@types/node": "^24.0.0",
     "@types/papaparse": "^5.5.2",
     "typescript": "~5.9.3",

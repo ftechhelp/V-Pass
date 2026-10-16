@@ -1,0 +1,81 @@
+{
+  "manifest_version": 3,
+  "name": "V-Pass",
+  "description": "Autofill, save prompts and passkeys for your end-to-end encrypted V-Pass vault on Nextcloud.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "icons": {
+    "16": "icons/unlocked-16.png",
+    "32": "icons/unlocked-32.png",
+    "48": "icons/unlocked-48.png",
+    "128": "icons/unlocked-128.png"
+  },
+  "action": {
+    "default_title": "V-Pass",
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16": "icons/locked-16.png",
+      "32": "icons/locked-32.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "idle",
+    "contextMenus",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/webauthn-main.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inline-menu/index.html", "notification-bar/index.html"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+      "description": "Open V-Pass"
+    },
+    "autofill-login": {
+      "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" },
+      "description": "Fill the best matching login on this page"
+    },
+    "generate-password": {
+      "suggested_key": { "default": "Ctrl+Shift+9", "mac": "Command+Shift+9" },
+      "description": "Generate a password (fills a new-password field, or copies it)"
+    }
+  }
+}

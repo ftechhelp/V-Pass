@@ -24,6 +24,13 @@ export * from './tools/strength.ts'
 export * from './tools/totp.ts'
 export * from './tools/hibp.ts'
 export * from './tools/health.ts'
+export * from './tools/url-match.ts'
+
+export * from './webauthn/cbor.ts'
+export * from './webauthn/rp.ts'
+export * from './webauthn/authenticator.ts'
+
+export * from './vault/cache.ts'
 
 export * from './api/client.ts'
 export * from './api/fetch-transport.ts'

@@ -13,3 +13,4 @@ node_modules/
 nordpass*.csv
 !packages/core/test/fixtures/*.csv
 /nextcloud-app/.phpunit.cache/
+/browser-extension/dist/

@@ -8,23 +8,31 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 - **Item types:** logins, passkeys, secure notes, credit cards and personal info.
 - **Features:** folders, favorites, trash, password generator, password health with a Have I Been Pwned (HIBP) breach check, TOTP codes and encrypted attachments.
 - **Import and export:** NordPass CSV import; encrypted `.vpass` backup and CSV export.
-- **Future clients:** a browser extension and a desktop client will follow. Everything they will need (crypto, schemas, importers, API client) lives in a shared, framework-free package.
+- **Clients:** the Nextcloud web app and a Chrome extension (`browser-extension/`); a desktop client will follow. Shared logic (crypto, schemas, importers, API client, the WebAuthn software authenticator, URL matching, the sync cache) lives in a framework-free package.
 
 ### Decisions made with the owner (don't silently change)
 
 - **Target:** Nextcloud **35 only** (`appinfo/info.xml` min = max = 35). Vue 3 + `@nextcloud/vue` 9.
 - **Zero-knowledge:** a separate master password, all crypto runs client-side, and the server stores only ciphertext.
 - **Passkeys mean both:**
-  - (a) website passkeys stored in the vault (`login.passkeys[]`), for the future extension to act as the authenticator;
+  - (a) website passkeys stored in the vault (`login.passkeys[]`), with the Chrome extension acting as the authenticator;
   - (b) unlocking the vault with a passkey via the WebAuthn PRF extension.
 - **v1 includes** password health + HIBP, TOTP and attachments. **Sharing between users is out of v1**, but per-item keys keep that path open.
+- **Chrome extension:**
+  - Load-unpacked only; there is no Web Store packaging.
+  - It unlocks with the master password.
+  - The opt-in **"Keep unlocked on this device"** (with a warning) persists the vault key in `chrome.storage.local` until the user locks. This was the owner's explicit choice; keep the warning.
+  - v1 covers login fill, save/update prompts, the generator, TOTP, cards and identities, and passkeys (create, sign in, conditional mediation).
 
 ## Verification status — read this first
 
 | Area | Status |
 |---|---|
-| `@vpass/core` unit tests (61) | ✅ passing (`npm test`) |
-| `tsc` (core, e2e) and `vue-tsc` (app) | ✅ clean |
+| `@vpass/core` unit tests (80) | ✅ passing (`npm test`). The authenticator's output is verified with `@simplewebauthn/server` |
+| `tsc` (core, e2e) and `vue-tsc` (app, extension) | ✅ clean |
+| Extension unit tests (27, happy-dom) | ✅ passing (`make test-extension`) |
+| Extension end-to-end tests (10, Chromium + dev Nextcloud) | ✅ passing (`make e2e-extension`) |
+| Extension on real websites (webauthn.io, GitHub passkeys, real login forms) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
 | Vite production build | ✅ builds `nextcloud-app/js/vpass-main.mjs` and `vpass-admin.mjs` |
 | `make lint-php`, PHPUnit (28) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
@@ -41,6 +49,8 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 5. `make test-api`
 6. `make e2e`
 7. `make zk-check`
+8. `make test-extension`
+9. `make e2e-extension` (builds the extension first)
 
 ## Commands
 
@@ -53,6 +63,9 @@ npm run typecheck                # tsc on core + vue-tsc on the app
 npx tsc -p e2e/tsconfig.json     # typecheck the e2e suites
 npm run build                    # production UI build → nextcloud-app/js/
 npm run dev                      # rebuild the UI on change
+npm run build:extension          # Chrome extension → browser-extension/dist (load unpacked)
+npm run dev:extension            # rebuild the extension on change, then reload it in chrome://extensions
+npm run test:extension           # extension unit tests (vitest + happy-dom)
 make help                        # all make targets
 ```
 
@@ -74,6 +87,7 @@ npx playwright test -c e2e/playwright.config.ts -g "onboarding"
 **`-t` / `-g` filters are unreliable in `e2e/`.** The tests in each file are serial and stateful:
 - In `e2e/api/vault-api.test.ts`, vault creation is itself a test, and later tests use the vault it creates.
 - The Playwright passkey test assumes the onboarding test already created a vault.
+- `e2e/extension/extension.spec.ts` connects and unlocks in its first test, and every later test relies on that.
 
 So filtering out the earlier tests breaks the later ones.
 
@@ -100,9 +114,11 @@ So filtering out the earlier tests breaks the later ones.
 ### Repo layout
 
 - **`packages/core` → `@vpass/core`:**
-  - It has no build step. `package.json` exports `src/index.ts` directly, and consumers (Vite, vitest, the future extension) bundle the TypeScript.
+  - It has no build step. `package.json` exports `src/index.ts` directly, and consumers (Vite, vitest, the extension) bundle the TypeScript.
   - Internal imports use explicit `.ts` extensions, so every consumer's tsconfig needs `allowImportingTsExtensions`.
+  - `"sideEffects": false`: bundles drop the modules they don't use (without it, the popup pulled in papaparse through the barrel export). Keep core modules free of top-level side effects.
 - **`nextcloud-app`:** the Nextcloud app. `lib/` is PHP (namespace `OCA\VPass`), `src/` is the Vue UI, `templates/` holds two stub templates.
+- **`browser-extension`:** the Chrome extension (MV3, Vue 3, plain Vite). See "Chrome extension" below.
 - **`e2e`:** API tests (vitest + the core client over HTTP), Playwright UI tests, the zero-knowledge script, and `helpers.ts`, which creates and deletes throwaway users through the provisioning API. Deleting the users also exercises `UserDeletedListener`.
 
 ### Key hierarchy and crypto conventions (`packages/core/src/crypto`)
@@ -124,7 +140,7 @@ per-item key ─wraps→ per-attachment key ─secretstream (64 KiB chunks)→ f
 - **What the KDF params protect:** they are stored in the clear with the vault and can be raised later. A server that sends weaker params cannot leak anything; the unwrap simply fails.
 - **Changing the master password** only re-wraps the VK (`rewrapWithPassword`). Items are never re-encrypted.
 - **Randomness:** use core's `uuid()` and `randomBytes()` (backed by `getRandomValues`). `crypto.randomUUID` was avoided because of extension contexts.
-- **WebCrypto** is used only for TOTP HMAC and HIBP's SHA-1. Both need a secure context.
+- **WebCrypto** is used for TOTP HMAC, HIBP's SHA-1 and the passkey authenticator (ECDSA P-256 / RSA keys, `webauthn/authenticator.ts`). All need a secure context.
 
 ### Item model (`model/items.ts`)
 
@@ -135,6 +151,7 @@ per-item key ─wraps→ per-attachment key ─secretstream (64 KiB chunks)→ f
 - **What the server sees:** only uuid, revision, created/updated/deleted timestamps and the attachment ciphertext size.
 - **Passkeys:**
   - Website passkeys are stored inside logins (`login.passkeys[]`: credentialId, rpId, userHandle, PKCS#8 `privateKey`, COSE alg, signCount).
+  - The authenticator creates ES256 or RS256 keys, uses "none" attestation with the fixed `VPASS_AAGUID`, and sets the UP/UV/BE/BS flags. **`signCount` is always 0**, as with other synced passkeys, so sync can never trip a site's clone detection.
   - The "Passkeys" sidebar category is just a filter over logins that have passkeys.
 - **`updateItem()`** maintains `updatedAt`, `passwordChangedAt` and `passwordHistory` (the last 20 entries).
 
@@ -152,7 +169,8 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - Every write calls `RevisionService::next()` inside a transaction. That calls `VaultMapper::bumpRevision`; the row lock serializes concurrent writes.
   - Clients pull changes with `GET /sync?since=N`.
   - Hard deletes write rows to `vpass_tombstones`.
-  - Updates must send `baseRevision`. A stale one gets **409 with `current`** (the server copy). In core this surfaces as `ConflictError`; the web store then loads the server copy.
+  - Updates must send `baseRevision`. A stale one gets **409 with `current`** (the server copy). In core this surfaces as `ConflictError`. The web store then loads the server copy; the extension re-applies its single change to the server copy and retries once.
+  - **A client's own writes only advance its sync revision when the write is exactly `revision + 1`** (`advanceRevision` in the web store, `VaultCache.putItem` in core). Otherwise another device's change in between would be skipped. Sync responses still use the max.
 - **Transports:** `VPassApi` takes an injected `Transport`.
   - Web app: `nextcloud-app/src/services/api.ts` (`@nextcloud/axios`, unwraps `ocs.data`).
   - Extension, desktop and tests: `createFetchTransport()` (Basic auth with a Login Flow v2 app password).
@@ -199,6 +217,62 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **Playwright selectors:** `data-test="…"` attributes are what the Playwright tests select on. Keep them when refactoring.
 - **Translations:** user-facing strings use `t('vpass', …)` / `n(...)`. No translation files exist yet.
 
+### Chrome extension (`browser-extension`)
+
+- **Build:** one `vite.config.ts` with four modes, all writing into `dist/` (`npm run build` runs them in order):
+
+| Mode | Output |
+|---|---|
+| `pages` | The Vue pages: `popup`, `options`, `prompt` (the passkey consent and unlock window), `inline-menu`, `notification-bar`, `offscreen`, plus `public/` with the static `manifest.json` and icons |
+| `background` | The module service worker as **one file** (`inlineDynamicImports`), because service workers can't use dynamic `import()` |
+| `content` | The isolated-world content script, as an IIFE |
+| `main-world` | The page-world WebAuthn shim, as an IIFE |
+
+  Output is unminified with source maps, so the unpacked extension is easy to audit. `@nextcloud/vue` is not used, because it needs Nextcloud page globals. Pages use `src/pages/ui/styles.css` and `vue-material-design-icons`.
+- **Contexts and trust** (`shared/protocol.ts` has the typed message maps; `background/router.ts` enforces them via `senderKind`):
+
+| Sender | Allowed messages | Rules |
+|---|---|---|
+| `page`: popup, options, prompt | `UiMessages` | Full access |
+| `frame-ui`: inline-menu and notification-bar iframes | `FrameUiMessages` | Only token-scoped calls. The background checks that the iframe sits in the same tab the token was issued for |
+| `content`: content scripts | `ContentMessages` | **The origin always comes from `sender`** (`pageUrlOf`/`originOf`), never from the message |
+
+  Anything else is refused. Background→content commands are `ContentCommand`s; content scripts accept them only from the extension itself (no `sender.tab`).
+- **The service worker owns every secret.** Pages and content scripts get only what they show or fill. Module state is lost whenever Chrome stops the worker, so:
+  - State that must survive lives in `chrome.storage.session` through `SessionMap`: frame registry, inline tokens, passkey grants, pending save prompts, pending passkey requests, the login flow.
+  - The vault key is re-read by `getVaultKey()`.
+  - Items are decrypted again lazily from the encrypted `VaultCache` in `chrome.storage.local`.
+- **Storage:**
+  - `chrome.storage.local` holds the account (server, loginName, app password), settings, the never-save list, the encrypted cache plus vault meta (for offline unlock), and `persistedVaultKey` **only while Keep unlocked is on**.
+  - `chrome.storage.session` holds the vault key. Chrome clears it when it closes.
+  - `lock()` wipes both copies of the key but keeps the checkbox choice (`keepUnlocked`).
+  - `sync()` locks and clears the cache if the server's vault `createdAt` changed (the vault was deleted and recreated).
+- **Auto-lock** uses `chrome.idle`: the system idle time and screen lock. Keep unlocked disables both.
+- **Connecting** uses Login Flow v2 (`background/account.ts`):
+  - Polling runs on a timer, a 30 s alarm and login-tab updates, so a stopped worker still finishes the flow.
+  - Fetches use `credentials: 'omit'`, so a Nextcloud browser session never mixes with the app password.
+  - Disconnecting revokes the app password with `DELETE /ocs/v2.php/core/apppassword`.
+- **Autofill:**
+  - Content scripts classify fields in `content/classify.ts` (`autocomplete` first, then hints and position) and report a `FrameForms` summary per frame.
+  - Fills only ever happen on a user action: the inline menu, the popup, the shortcut or the context menu. Only visible fields are filled.
+  - Logins fill only into a frame whose URL matches the item (`matchUrl`); http, or a non-matching site, needs a confirm (`force`).
+  - Cards and identities from the popup go to same-origin frames first. A third-party frame needs a confirm.
+  - Inline-menu fills go only to the frame that opened the menu.
+- **In-page UI** (`content/overlay.ts`):
+  - It sits in a closed shadow root on `<html>`, with `!important` `:host` styles (shadow-internal `!important` beats the page's).
+  - The menu and the bar are extension iframes. Only a height or close number is posted to the page.
+  - **Clickjacking guard** (`pages/ui/visibility.ts`): clicks count only after IntersectionObserver v2 has reported the iframe `isVisible` for 400 ms. The e2e test fades the page and checks that nothing fills.
+- **Passkeys:**
+  - `content/webauthn-main.ts` (MAIN world, `document_start`) wraps `navigator.credentials.create/get` and posts JSON options to `content/bridge.ts`, which forwards them to `background/fido2.ts`.
+  - `fido2.ts` validates the RP ID against the sender origin and the Public Suffix List (`resolveRpId`). It opens the `prompt` window, keeps the request in session storage, and sends the result back as a `fido2Result` command.
+  - The prompt sends a heartbeat every 10 s to keep the worker alive.
+  - **A new passkey is saved to the server before the response goes back to the site.**
+  - "Use another device" returns `fallback` → the shim calls the saved native function.
+  - Cross-origin iframes, `mediation: 'conditional'` create, and unsupported algorithms all fall back to the browser.
+  - Get requests while unlocked with no matching passkey fall back immediately, without a window.
+  - Conditional mediation: the pending request shows passkeys in the inline menu. Picking one creates a 60 s one-time **grant** (`consumeGrant`) that the frame's `fido2Get` must present, so a page can't get silent assertions.
+- **Save prompts** (`background/save.ts`): `classifySubmission` decides new / update / nothing. The prompt is kept per tab for 5 minutes, and the next page load asks for it (`pendingSaveBar`). Prompts appear only while unlocked.
+
 ## Gotchas found so far
 
 - **vue-tsc bug:** a static attribute containing `//` (for example `placeholder="https://example.com"`) on a component inside `v-for` breaks scope, and the v-for variables report "Cannot find name". Bind it as an expression instead; see `PLACEHOLDER` in `UrlsEditor.vue`.
@@ -225,7 +299,19 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - Folder names are deduplicated case-insensitively, keeping the first-seen casing.
   - The fixture `packages/core/test/fixtures/nordpass-export.csv` is synthetic. Replace it with a real dummy export when the owner provides one.
 - **CSV export:** it deliberately does **not** escape spreadsheet formulas, because it is meant for import into other password managers.
-- **PRF unlock passkeys** are bound to the Nextcloud hostname (rpId), so the extension and desktop client need their own unlock methods.
+- **PRF unlock passkeys** are bound to the Nextcloud hostname (rpId), so the extension and desktop client need their own unlock methods. The extension uses the master password, plus the opt-in Keep unlocked.
+- **Extension, Node vs Chrome:** Node's `URL` gives `chrome-extension://` URLs a `"null"` origin. The router compares against the `chrome.runtime.getURL('')` prefix instead.
+- **Extension tests (Playwright):**
+  - Launch with `chromium.launchPersistentContext(dir, { channel: 'chromium', args: ['--load-extension=…'] })`. New headless supports extensions.
+  - The V-Pass UI is in a **closed** shadow root, so locators can't reach it. Use `page.frames()` for the iframes, and mouse coordinates for the field icon (`clickFieldIcon`).
+  - The iframes ignore clicks for 400 ms (clickjacking guard); `vpassFrame()` waits for that.
+  - "Active tab" logic: open the popup as a tab, then `bringToFront()` the site and `reload()` the popup.
+  - The Keep unlocked checkbox remembers the last choice, so tests must set it explicitly.
+  - The Login Flow v2 page has two "log in" buttons. Use `{ name: 'Log in', exact: true }`.
+- **Inline menu auto-open** happens only on empty username, password and code fields, and only when there is something to offer. It closes as soon as the user types; otherwise it covers the submit button. The open re-checks focus and emptiness after its awaits.
+- **Field-detection traps:**
+  - `<label>` text includes nested `<option>` text ("United States" read as a state field). `labelText()` skips nested controls.
+  - "MM/YY" contains "mm", so check the combined expiry pattern before month/year.
 - **Nextcloud 36:** `appinfo/info.xml` caps `max-version` at 35, so it must be bumped for Nextcloud 36.
 
 ## Not done yet (known follow-ups)
@@ -238,8 +324,17 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - Generator history.
 - l10n files.
 
+**Extension follow-ups:**
+- Try it on real sites and tune `classify.ts`.
+- Passkeys in cross-origin iframes.
+- Save prompts while locked (unlock, then save).
+- The PRF/largeBlob extensions for sites.
+- EdDSA keys (for imported passkeys).
+- Firefox port.
+- Web Store packaging, if the owner ever wants it.
+- Moving the web store onto core's `VaultCache`.
+
 **Roadmap:**
-- Browser extension: autofill, plus a WebAuthn authenticator using `login.passkeys[]`.
 - Desktop client.
 - Sharing via X25519 key pairs that wrap per-item keys.
 - Emergency access.

@@ -1,0 +1,28 @@
+{
+  "name": "vpass-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "V-Pass for Chrome: autofill, save prompts and passkeys for a V-Pass vault on Nextcloud.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --mode pages && vite build --mode background && vite build --mode content && vite build --mode main-world",
+    "dev": "node scripts/watch.js",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@vpass/core": "*",
+    "vue": "^3.5.44",
+    "vue-material-design-icons": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.5",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "happy-dom": "^21.0.3",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.5",
+    "vue-tsc": "^3.3.13"
+  }
+}

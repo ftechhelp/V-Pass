@@ -5,20 +5,27 @@
   "license": "AGPL-3.0-or-later",
   "workspaces": [
     "packages/*",
-    "nextcloud-app"
+    "nextcloud-app",
+    "browser-extension"
   ],
   "scripts": {
     "build": "npm run build -w nextcloud-app",
     "dev": "npm run dev -w nextcloud-app",
     "test": "npm test -w @vpass/core",
-    "typecheck": "npm run typecheck -w @vpass/core && npm run typecheck -w nextcloud-app",
+    "typecheck": "npm run typecheck -w @vpass/core && npm run typecheck -w nextcloud-app && npm run typecheck -w vpass-browser-extension",
     "e2e": "playwright test -c e2e/playwright.config.ts",
-    "test:api": "vitest run -c e2e/vitest.config.ts"
+    "test:api": "vitest run -c e2e/vitest.config.ts",
+    "build:extension": "npm run build -w vpass-browser-extension",
+    "dev:extension": "npm run dev -w vpass-browser-extension",
+    "test:extension": "npm test -w vpass-browser-extension",
+    "e2e:extension": "playwright test -c e2e/playwright.extension.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3",
+    "@vpass/core": "*",
     "typescript": "~5.9.3",
-    "vitest": "^5.0.5",
-    "@vpass/core": "*"
+    "vitest": "^5.0.5"
   }
 }

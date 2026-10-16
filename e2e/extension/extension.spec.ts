@@ -1,0 +1,241 @@
+import { type Item, type LoginItem, decryptItem, initCrypto, parseTotp, totpCode, unlockWithPassword } from '@vpass/core'
+import type { Page } from '@playwright/test'
+import { apiFor } from '../helpers.ts'
+import { BASE_URL, type Harness, LOGIN, MASTER, expect, extensionUrl, launch, openPopup, test, vpassFrame } from './fixtures.ts'
+
+/*
+ * The Chrome extension against the dev Nextcloud (make dev-up) and a local test
+ * site. One browser and one user for the whole file, so the tests run in order.
+ */
+test.describe.configure({ mode: 'serial' })
+
+/** Decrypt the user's vault straight from the server, as a second client would. */
+async function vault(h: Harness): Promise<Item[]> {
+	await initCrypto()
+	const api = apiFor(h.user.id, h.user.password)
+	const key = unlockWithPassword(MASTER, (await api.getVault())!)
+	const { items } = await api.sync(0)
+	return items.filter((r) => r.deletedAt === null).map((r) => decryptItem(key, r).item)
+}
+
+async function siteLogin(h: Harness, username = LOGIN.username): Promise<LoginItem> {
+	const login = (await vault(h)).find((i): i is LoginItem => i.type === 'login' && i.username === username && i.urls.includes(h.site.origin))
+	expect(login, `login ${username}`).toBeTruthy()
+	return login!
+}
+
+/** Click the V-Pass icon drawn inside a field (it lives in a closed shadow root, so use coordinates). */
+async function clickFieldIcon(page: Page, selector: string): Promise<void> {
+	const field = page.locator(selector)
+	await field.click()
+	const box = (await field.boundingBox())!
+	await page.waitForTimeout(150)
+	await page.mouse.click(box.x + box.width - 17, box.y + box.height / 2)
+}
+
+async function unlockInPopup(popup: Page, keepUnlocked = false): Promise<void> {
+	await popup.locator('[data-test="master-password"]').fill(MASTER)
+	// The checkbox remembers the last choice, so always set it.
+	await popup.locator('[data-test="keep-unlocked"]').setChecked(keepUnlocked)
+	await expect(popup.locator('[data-test="keep-unlocked-warning"]')).toBeVisible({ visible: keepUnlocked })
+	await popup.locator('[data-test="unlock-submit"]').click()
+	await expect(popup.locator('[data-test="lock"]')).toBeVisible()
+}
+
+test('connects with Nextcloud Login Flow v2 and unlocks with the master password', async ({ harness: h }) => {
+	const popup = await h.context.newPage()
+	await popup.goto(extensionUrl(h, 'popup/index.html'))
+	await popup.locator('[data-test="server-url"]').fill(BASE_URL)
+	const flowOpened = h.context.waitForEvent('page')
+	await popup.locator('[data-test="connect"]').click()
+	const flow = await flowOpened
+	await flow.waitForLoadState()
+	await flow.getByRole('button', { name: 'Log in', exact: true }).click()
+	await flow.locator('input[name="user"]').fill(h.user.id)
+	await flow.locator('input[name="password"]').fill(h.user.password)
+	await flow.locator('button[type="submit"]').click()
+	await flow.getByRole('button', { name: /grant access/i }).click()
+
+	await expect(popup.locator('[data-test="unlock-form"]')).toBeVisible({ timeout: 30_000 })
+	await popup.locator('[data-test="master-password"]').fill('not the master password')
+	await popup.locator('[data-test="unlock-submit"]').click()
+	await expect(popup.locator('[data-test="unlock-error"]')).toContainText('not correct')
+	await unlockInPopup(popup)
+	await popup.close()
+})
+
+test('fills a login from the inline menu and from the popup', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/login`)
+	await page.locator('input[name="email"]').click()
+	const menu = await vpassFrame(page, 'inline-menu')
+	await menu.locator('[data-test="inline-login"]').first().click()
+	await expect(page.locator('input[name="email"]')).toHaveValue(LOGIN.username)
+	await expect(page.locator('input[name="password"]')).toHaveValue(LOGIN.password)
+
+	await page.locator('input[name="email"]').fill('')
+	await page.locator('input[name="password"]').fill('')
+	const popup = await openPopup(h, page)
+	await popup.reload()
+	await popup.locator('[data-test="site-login-Test site"]').click()
+	await expect(page.locator('input[name="password"]')).toHaveValue(LOGIN.password)
+	await page.close()
+})
+
+test('ignores clicks on V-Pass UI that the page made invisible (clickjacking guard)', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/login`)
+	// A hostile page fades everything, including V-Pass's menu, to hide it under a decoy.
+	await page.addStyleTag({ content: 'html { opacity: 0.05 !important }' })
+	await page.locator('input[name="email"]').click()
+	const menu = await vpassFrame(page, 'inline-menu')
+	await menu.locator('[data-test="inline-login"]').first().click()
+	await expect(menu.getByText('could not confirm this menu is fully visible')).toBeVisible()
+	await expect(page.locator('input[name="password"]')).toHaveValue('')
+	await page.close()
+})
+
+test('offers to update a changed password, keeping the old one in the history', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/login`)
+	await page.locator('input[name="email"]').fill(LOGIN.username)
+	await page.locator('input[name="password"]').fill('Brand-new-pass-2026!')
+	await page.getByRole('button', { name: 'Log in' }).click()
+	await expect(page.locator('#welcome')).toBeVisible()
+
+	const bar = await vpassFrame(page, 'notification-bar')
+	await expect(bar.locator('[data-test="save-bar-title"]')).toContainText('Update the saved password?')
+	await bar.locator('[data-test="save-bar-save"]').click()
+	await expect.poll(async () => (await siteLogin(h)).password).toBe('Brand-new-pass-2026!')
+	expect((await siteLogin(h)).passwordHistory[0]?.password).toBe(LOGIN.password)
+	await page.close()
+})
+
+test('generates a password on a sign-up form and saves the new login', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/signup`)
+	await page.locator('input[name="email"]').fill('bob@example.com')
+	await clickFieldIcon(page, 'input[name="password"]')
+	const menu = await vpassFrame(page, 'inline-menu')
+	await menu.locator('[data-test="inline-generate"]').click()
+	const generated = await page.locator('input[name="password"]').inputValue()
+	expect(generated.length).toBeGreaterThanOrEqual(16)
+	await expect(page.locator('input[name="password2"]')).toHaveValue(generated)
+
+	await page.getByRole('button', { name: 'Sign up' }).click()
+	const bar = await vpassFrame(page, 'notification-bar')
+	await expect(bar.locator('[data-test="save-bar-title"]')).toContainText('Save this login')
+	await bar.locator('[data-test="save-bar-save"]').click()
+	await expect.poll(async () => (await vault(h)).some((i) => i.type === 'login' && i.username === 'bob@example.com' && i.password === generated)).toBe(true)
+	await page.close()
+})
+
+test('fills one-time codes, payment cards and addresses', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+
+	await page.goto(`${h.site.origin}/otp`)
+	await page.locator('input[name="code"]').click()
+	await (await vpassFrame(page, 'inline-menu')).locator('[data-test="inline-login"]').first().click()
+	const params = parseTotp(LOGIN.totpSecret)
+	const valid = [(await totpCode(params)).code, (await totpCode(params, Date.now() - 30_000)).code]
+	expect(valid).toContain(await page.locator('input[name="code"]').inputValue())
+
+	await page.goto(`${h.site.origin}/checkout`)
+	await clickFieldIcon(page, 'input[name="cardnumber"]')
+	await (await vpassFrame(page, 'inline-menu')).locator('[data-test="inline-card"]').click()
+	await expect(page.locator('input[name="cardnumber"]')).toHaveValue('4111111111111111')
+	await expect(page.locator('input[name="ccname"]')).toHaveValue('Alice Example')
+	await expect(page.locator('input[name="exp"]')).toHaveValue('07/29')
+	await expect(page.locator('input[name="cvc"]')).toHaveValue('123')
+
+	await page.goto(`${h.site.origin}/address`)
+	await clickFieldIcon(page, 'input[name="first_name"]')
+	await (await vpassFrame(page, 'inline-menu')).locator('[data-test="inline-identity"]').click()
+	await expect(page.locator('input[name="first_name"]')).toHaveValue('Alice')
+	await expect(page.locator('input[name="last_name"]')).toHaveValue('Example')
+	await expect(page.locator('input[name="street"]')).toHaveValue('1 Main St')
+	await expect(page.locator('input[name="city"]')).toHaveValue('Springfield')
+	await expect(page.locator('input[name="zip"]')).toHaveValue('62701')
+	await expect(page.locator('select[name="country"]')).toHaveValue('US')
+	await expect(page.locator('input[name="phone"]')).toHaveValue('+1 555 0100')
+	await page.close()
+})
+
+test('creates a passkey in the vault and signs in with it (verified by the site)', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/webauthn`)
+
+	const promptOpened = h.context.waitForEvent('page')
+	await page.locator('#register').click()
+	const prompt = await promptOpened
+	await prompt.locator('[data-test="passkey-save"]').click()
+	await expect(page.locator('#result')).toHaveText('registered')
+	expect(h.site.credentials).toHaveLength(1)
+	const passkey = (await siteLogin(h)).passkeys[0]
+	expect(passkey).toMatchObject({ rpId: 'localhost', userName: LOGIN.username, credentialId: h.site.credentials[0]!.credential.id })
+
+	const signInPrompt = h.context.waitForEvent('page')
+	await page.locator('#login').click()
+	await (await signInPrompt).locator('[data-test="passkey-use"]').first().click()
+	await expect(page.locator('#result')).toHaveText(`signed in as ${LOGIN.username}`)
+	await page.close()
+})
+
+test('offers saved passkeys in the inline menu (passkey autofill)', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/webauthn-autofill`)
+	await page.waitForTimeout(500)
+	await page.locator('#username').click()
+	const menu = await vpassFrame(page, 'inline-menu')
+	await menu.locator('[data-test="inline-passkey"]').click()
+	await expect(page.locator('#result')).toHaveText(`signed in as ${LOGIN.username}`)
+	await page.close()
+})
+
+test('"Use another device" hands the request to the browser', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/webauthn`)
+	// A virtual security key stands in for "another device".
+	const cdp = await h.context.newCDPSession(page)
+	await cdp.send('WebAuthn.enable')
+	await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: { protocol: 'ctap2', transport: 'usb', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+	})
+	await page.locator('#username').fill('carol@example.com')
+	const promptOpened = h.context.waitForEvent('page')
+	await page.locator('#register').click()
+	await (await promptOpened).locator('[data-test="passkey-fallback"]').click()
+	await expect(page.locator('#result')).toHaveText('registered')
+	expect(h.site.credentials.find((c) => c.username === 'carol@example.com')).toBeTruthy()
+	expect((await vault(h)).some((i) => i.type === 'login' && i.passkeys.some((p) => p.userName === 'carol@example.com'))).toBe(false)
+	await page.close()
+})
+
+test('locks, offers to unlock in the field, and "keep unlocked" survives a browser restart', async ({ harness: h }) => {
+	let popup = await h.context.newPage()
+	await popup.goto(extensionUrl(h, 'popup/index.html'))
+	await popup.locator('[data-test="lock"]').click()
+	await expect(popup.locator('[data-test="unlock-form"]')).toBeVisible()
+
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/login`)
+	await clickFieldIcon(page, 'input[name="email"]')
+	await expect((await vpassFrame(page, 'inline-menu')).locator('[data-test="inline-unlock"]')).toBeVisible()
+	await page.close()
+
+	await unlockInPopup(popup, true)
+	await h.context.close()
+	Object.assign(h, await launch(h.userDataDir))
+	popup = await h.context.newPage()
+	await popup.goto(extensionUrl(h, 'popup/index.html'))
+	await expect(popup.locator('[data-test="lock"]')).toBeVisible()
+
+	// Unlocking with the box unticked turns it off: after the next restart V-Pass is locked.
+	await popup.locator('[data-test="lock"]').click()
+	await unlockInPopup(popup, false)
+	await h.context.close()
+	Object.assign(h, await launch(h.userDataDir))
+	popup = await h.context.newPage()
+	await popup.goto(extensionUrl(h, 'popup/index.html'))
+	await expect(popup.locator('[data-test="unlock-form"]')).toBeVisible()
+})

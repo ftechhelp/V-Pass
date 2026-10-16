@@ -7,10 +7,10 @@ COMPOSE     := docker compose -f dev/docker-compose.yml
 PHP_IMAGE   := composer:2
 OCC         := $(COMPOSE) exec -T -u www-data nextcloud php occ
 
-.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-down dev-reset dev-logs test-api e2e zk-check appstore clean
+.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-down dev-reset dev-logs test-api e2e zk-check appstore extension test-extension e2e-extension clean
 
 help: ## Show this help
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install JS and PHP dev dependencies
 	npm ci
@@ -56,6 +56,15 @@ e2e: ## Browser end-to-end tests against the dev instance
 zk-check: ## Prove the server stores no plaintext (needs a populated dev instance)
 	./e2e/zero-knowledge-check.sh
 
+extension: ## Build the Chrome extension into browser-extension/dist (load it unpacked)
+	npm run build:extension
+
+test-extension: ## Extension unit tests: field detection, filling, save prompts, sender checks
+	npm run test:extension
+
+e2e-extension: extension ## Extension end-to-end tests in Chromium against the dev instance
+	npm run e2e:extension
+
 appstore: build ## Package build/vpass-<version>.tar.gz for installing on a server
 	rm -rf $(BUILD_DIR)/$(APP_ID)
 	mkdir -p $(BUILD_DIR)/$(APP_ID)
@@ -65,4 +74,4 @@ appstore: build ## Package build/vpass-<version>.tar.gz for installing on a serv
 	@echo "Created $(BUILD_DIR)/$(APP_ID)-$(VERSION).tar.gz"
 
 clean: ## Remove build output
-	rm -rf $(BUILD_DIR) $(APP_DIR)/js
+	rm -rf $(BUILD_DIR) $(APP_DIR)/js browser-extension/dist
