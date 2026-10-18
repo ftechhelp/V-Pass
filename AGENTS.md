@@ -22,7 +22,8 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
   - **Distribution: the Chrome Web Store, unlisted** (owner's decision on 2026-10-16, replacing "load unpacked only").
     - It's published under the owner's developer account. The owner uploads releases, unless they provide Chrome Web Store API credentials.
     - The submission kit is `browser-extension/store/LISTING.md` plus `PRIVACY.md`.
-    - Until the listing exists, the web app's "Browser extension" page offers the zip for a manual install.
+    - The listing is live since 2026-10-18: <https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl> (extension id `fnbnjjalcjpopkiobdkaaffdiccolbfl`). Being unlisted, it can only be found through this link.
+    - The web app's "Browser extension" page links to it and keeps the bundled zip as a manual-install fallback.
   - It unlocks with the master password.
   - The opt-in **"Keep unlocked on this device"** (with a warning) persists the vault key in `chrome.storage.local` until the user locks. This was the owner's explicit choice; keep the warning.
   - v1 covers login fill, save/update prompts, the generator, TOTP, cards and identities, and passkeys (create, sign in, conditional mediation).
@@ -35,13 +36,13 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | `tsc` (core, e2e) and `vue-tsc` (app, extension) | ✅ clean |
 | Extension unit tests (27, happy-dom) | ✅ passing (`make test-extension`) |
 | Extension end-to-end tests (11, Chromium + dev Nextcloud), including the web app's "Browser extension" page connecting a fresh browser | ✅ passing (`make e2e-extension`) |
-| Chrome Web Store listing | ❌ not submitted yet. Waiting for the owner's developer account; then set `CHROME_WEB_STORE_URL` (see `browser-extension/store/LISTING.md`) |
+| Chrome Web Store listing | ✅ published (unlisted) on 2026-10-18 with extension 0.1.0. `CHROME_WEB_STORE_URL` points to it; a Playwright UI test checks the page's "Add to Chrome" link |
 | Extension on real websites (webauthn.io, GitHub passkeys, real login forms) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
 | Vite production build | ✅ builds `nextcloud-app/js/vpass-main.mjs` and `vpass-admin.mjs` |
 | `make lint-php`, PHPUnit (31) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
-| Production install | ✅ v0.2.0 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
+| Production install | ✅ v0.2.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, and to 0.2.1 (the Chrome Web Store link) on 2026-10-18. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
 **Ship every tested change to production (standing instruction from the owner).**
 - **When:** once a change is finished and its tests pass on the throwaway dev stack, update V-Pass on the owner's production Nextcloud so they can test it too. Don't wait to be asked.
@@ -263,7 +264,8 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **"Browser extension" page** (`views/ExtensionView.vue`, `services/extension.ts`):
   - It talks to the extension with `window.postMessage`: `{ vpass: 'webapp', kind: 'status' | 'connect' }` goes out, and `{ vpass: 'extension', … }` comes back.
   - It shows install, connect and update state.
-  - **`CHROME_WEB_STORE_URL`** stays empty until Google approves the listing. While it's empty, the page offers the bundled zip (`config.extensionVersion`, downloaded from `/apps/vpass/extension/download`) with load-unpacked steps.
+  - **`CHROME_WEB_STORE_URL`** is the listing link. When the extension is missing, the page shows "Add to Chrome". The bundled zip (`config.extensionVersion`, downloaded from `/apps/vpass/extension/download`) with load-unpacked steps sits behind "Install it by hand instead".
+  - Chrome updates store installs by itself, so the page shows no update notice while the URL is set. That includes copies loaded unpacked. With an empty URL, the page goes back to offering the zip as the main install path, with update notices.
 - **Playwright selectors:** `data-test="…"` attributes are what the Playwright tests select on. Keep them when refactoring.
 - **Translations:** user-facing strings use `t('vpass', …)` / `n(...)`. No translation files exist yet.
 
@@ -385,7 +387,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - l10n files.
 
 **Extension follow-ups:**
-- Submit to the Chrome Web Store (owner's account), then set `CHROME_WEB_STORE_URL`. Optionally automate uploads with the Chrome Web Store API.
+- Optionally automate Chrome Web Store uploads with its API (needs the owner's credentials).
 - Try it on real sites and tune `classify.ts`.
 - Passkeys in cross-origin iframes.
 - Save prompts while locked (unlock, then save).

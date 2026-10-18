@@ -120,3 +120,16 @@ test('passkey unlock via WebAuthn PRF (virtual authenticator)', async ({ page, b
 	await page.getByRole('button', { name: 'Unlock with passkey' }).click()
 	await expect(page.locator('[data-test="nav-all"]')).toBeVisible()
 })
+
+test('the "Browser extension" page offers the Chrome Web Store when the extension is missing', async ({ page }) => {
+	await login(page)
+	await unlock(page)
+	await page.goto('/apps/vpass/#/extension')
+	await expect(page.locator('[data-test="extension-missing"]')).toBeVisible()
+	await expect(page.locator('[data-test="extension-store"]')).toHaveAttribute('href', 'https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl')
+	// The bundled zip is only the fallback now.
+	await expect(page.locator('[data-test="extension-manual"]')).toBeHidden()
+	await page.getByRole('button', { name: 'Install it by hand instead' }).click()
+	await expect(page.locator('[data-test="extension-manual"]')).toBeVisible()
+	await expect(page.locator('[data-test="extension-download"]')).toBeVisible()
+})

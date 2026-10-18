@@ -72,9 +72,8 @@ The extension uses the vault you created in the V-Pass web app. It talks to the 
 **Install** (Chrome, or another Chromium browser such as Edge or Brave):
 
 1. In V-Pass on your Nextcloud, open **Browser extension** in the navigation.
-2. Install the extension:
-   - Once V-Pass is in the Chrome Web Store: click **Add to Chrome**. Chrome then keeps it up to date.
-   - Until then: download it from that page, unzip it, and load it with **Developer mode → Load unpacked** in `chrome://extensions`. The page walks you through it.
+2. Click **Add to Chrome**. It opens V-Pass in the [Chrome Web Store](https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl), and Chrome then keeps it up to date. The listing is unlisted, so searching the store won't find it; use this link.
+   - Without the Web Store: choose **Install it by hand instead** on that page, download the zip, unzip it, and load it with **Developer mode → Load unpacked** in `chrome://extensions`. A copy installed this way doesn't update itself.
 3. Back on that page, click **Connect this browser**, confirm in the V-Pass window, and choose **Grant access** on the Nextcloud page that opens.
 4. Unlock with your master password from the V-Pass toolbar icon.
 

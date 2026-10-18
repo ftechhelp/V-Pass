@@ -91,7 +91,7 @@ All of this runs on the device. Page content and browsing history are never coll
 - Leave everything else unticked: no browsing history, page content, location, communications or user activity is collected.
 - Tick all three certifications (not sold to third parties; not used for unrelated purposes; not used for creditworthiness or lending).
 
-**Privacy policy URL:** 1
+**Privacy policy URL:** https://github.com/ftechhelp/V-Pass/blob/main/PRIVACY.md
 
 ## Distribution tab
 
@@ -114,5 +114,7 @@ V-Pass needs a Nextcloud server with the V-Pass app. Test account:
 
 ## After approval
 
-1. Copy the listing link (`https://chromewebstore.google.com/detail/<id>`) into `CHROME_WEB_STORE_URL` in `nextcloud-app/src/services/extension.ts`, and ship the web app. Its "Browser extension" page then shows "Add to Chrome".
+The listing went live on 2026-10-18: <https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl> (extension id `fnbnjjalcjpopkiobdkaaffdiccolbfl`).
+
+1. Done: `CHROME_WEB_STORE_URL` in `nextcloud-app/src/services/extension.ts` holds the link, so the web app's "Browser extension" page shows "Add to Chrome". If the listing ever moves, update it there, in the UI test (`e2e/ui/vault.spec.ts`) and in the README.
 2. Updates: bump the manifest version, run `make extension-zip`, and upload the zip under **Package → Upload new package**. Then submit for review.

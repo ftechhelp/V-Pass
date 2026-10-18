@@ -13,7 +13,7 @@ import { generateUrl } from '@nextcloud/router'
  * listing; then the page shows "Add to Chrome" and the download becomes the
  * fallback. Set it to https://chromewebstore.google.com/detail/<extension id>.
  */
-export const CHROME_WEB_STORE_URL = ''
+export const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl'
 
 /** Version of the extension this server offers for download, or null. */
 export const bundledExtensionVersion = loadState<{ extensionVersion: string | null }>('vpass', 'config', { extensionVersion: null }).extensionVersion ?? null
