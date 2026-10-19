@@ -8,7 +8,7 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 - **Item types:** logins, passkeys, secure notes, credit cards and personal info.
 - **Features:** folders, favorites, trash, password generator, password health with a Have I Been Pwned (HIBP) breach check, TOTP codes and encrypted attachments.
 - **Import and export:** NordPass CSV import; encrypted `.vpass` backup and CSV export.
-- **Clients:** the Nextcloud web app and a Chrome extension (`browser-extension/`); a desktop client will follow. Shared logic (crypto, schemas, importers, API client, the WebAuthn software authenticator, URL matching, the sync cache) lives in a framework-free package.
+- **Clients:** the Nextcloud web app, a Chrome extension (`browser-extension/`) and an iPhone app with an AutoFill extension (`ios/`); a desktop client will follow. Shared logic (crypto, schemas, importers, API client, the WebAuthn software authenticator, URL matching, the sync cache) lives in a framework-free package. The iPhone app uses a Swift port of it, `ios/VPassKit`, kept byte-compatible by test vectors.
 
 ### Decisions made with the owner (don't silently change)
 
@@ -27,6 +27,12 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
   - It unlocks with the master password.
   - The opt-in **"Keep unlocked on this device"** (with a warning) persists the vault key in `chrome.storage.local` until the user locks. This was the owner's explicit choice; keep the warning.
   - v1 covers login fill, save/update prompts, the generator, TOTP, cards and identities, and passkeys (create, sign in, conditional mediation).
+- **iPhone app** (owner's decisions on 2026-10-19):
+  - **Native SwiftUI app plus an AutoFill credential provider extension**, minimum iOS 18. A free Apple account can't get the AutoFill entitlement, so the owner is enrolling in the paid Apple Developer Program.
+  - **Built in the cloud:** the owner has no Mac. GitHub Actions macOS runners build, test and sign it (`.github/workflows/ios.yml`); the repo is public, so the minutes are free.
+  - **Distribution: TestFlight internal testing.** An unlisted App Store release may come later. Builds expire after 90 days.
+  - **v1 scope:** connect, unlock (master password, recovery key, Face ID), browse/search/copy, TOTP, add and edit items with the generator; AutoFill for passwords, one-time codes and passkeys (sign in and save). Attachments, health, import/export, vault creation and changing the master password stay in the web app.
+  - **Face ID instead of PRF:** the vault key goes into the Keychain behind `.biometryCurrentSet`, opt-in. PRF unlock passkeys are bound to the Nextcloud hostname and don't fit a native app.
 
 ## Verification status — read this first
 
@@ -42,6 +48,11 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | `make lint-php`, PHPUnit (31) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
+| VPassKit (Swift port of core) on Linux, 55 tests | ✅ passing (`make test-ios-kit`, Docker). Includes the vectors from `npm run vectors:ios` |
+| Swift client vs dev Nextcloud | ✅ passing (`make test-ios-interop`): reads core's vault, edits (409 included), saves a passkey; core and `@simplewebauthn/server` verify it |
+| iPhone app + AutoFill extension build, simulator UI tests | ⏳ first CI run on branch `ios/app` (macOS runner); see the iOS workflow |
+| TestFlight upload | ❌ waits for the owner's Apple Developer account and the secrets in `ios/SETUP.md` |
+| iPhone app on a real device (Face ID, AutoFill in Safari and apps, passkeys, memory in the extension) | ❌ not tried yet; the checklist is in `ios/SETUP.md` step 9 |
 | Production install | ✅ v0.2.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, and to 0.2.1 (the Chrome Web Store link) on 2026-10-18. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
 **Ship every tested change to production (standing instruction from the owner).**
@@ -84,6 +95,8 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 
 Production has disabled apps with leftover background jobs, so `occ background-job:list` logs harmless "failed to create instance" warnings.
 
+**iPhone changes ship through TestFlight, not the Nextcloud procedure above.** Changes only under `ios/` (or core's vector script) don't touch the server, so there is no production update. Once the signing secrets exist, a push to `main` that touches `ios/` or `packages/core` runs the iOS workflow and uploads a build (build number = workflow run number) after the Linux, interop and simulator jobs pass. Tell the owner the build number and what to try. If a change touches both the server and the app, do both.
+
 **Full verification run** (Docker works for the user now; run `npx playwright install chromium` once):
 1. `make install`
 2. `make lint-php`
@@ -94,6 +107,9 @@ Production has disabled apps with leftover background jobs, so `occ background-j
 7. `make zk-check`
 8. `make test-extension`
 9. `make e2e-extension` (builds the extension first)
+10. `make test-ios-kit`
+11. `make test-ios-interop`
+12. The iPhone app itself only builds on macOS: push and check the iOS workflow on GitHub Actions.
 
 ## Commands
 
@@ -113,6 +129,13 @@ make extension-zip               # build/vpass-extension-<version>.zip for the C
 make store-images                # regenerate the Chrome Web Store screenshots (dev instance must be up)
 make dev-upgrade                 # occ upgrade on the dev instance, needed after an app version bump
 make help                        # all make targets
+
+# iPhone app (ios/)
+npm run vectors:ios              # regenerate VPassKit's test vectors (and its EFF word list) from core
+make test-ios-kit                # VPassKit unit + vector tests on Linux (Docker image vpass-swift)
+make test-ios-interop            # the Swift client against the dev instance (needs dev-up)
+cd ios && xcodegen               # generate VPass.xcodeproj from project.yml (macOS only; CI does this)
+ios/scripts/signing.sh check     # signing material for TestFlight (see ios/SETUP.md)
 ```
 
 **Running a single test:**
@@ -165,7 +188,8 @@ So filtering out the earlier tests breaks the later ones.
   - `"sideEffects": false`: bundles drop the modules they don't use (without it, the popup pulled in papaparse through the barrel export). Keep core modules free of top-level side effects.
 - **`nextcloud-app`:** the Nextcloud app. `lib/` is PHP (namespace `OCA\VPass`), `src/` is the Vue UI, `templates/` holds two stub templates.
 - **`browser-extension`:** the Chrome extension (MV3, Vue 3, plain Vite). See "Chrome extension" below.
-- **`e2e`:** API tests (vitest + the core client over HTTP), Playwright UI tests, the zero-knowledge script, and `helpers.ts`, which creates and deletes throwaway users through the provisioning API. Deleting the users also exercises `UserDeletedListener`.
+- **`e2e`:** API tests (vitest + the core client over HTTP), Playwright UI tests, the zero-knowledge script, the iOS interop test (`e2e/ios/`), and `helpers.ts`, which creates and deletes throwaway users through the provisioning API. Deleting the users also exercises `UserDeletedListener`.
+- **`ios`:** the iPhone app. See "iPhone app" below.
 
 ### Key hierarchy and crypto conventions (`packages/core/src/crypto`)
 
@@ -333,6 +357,29 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **Passkey requests that need PRF, largeBlob, hmac-secret or credBlob** go straight to the browser, because V-Pass's authenticator can't provide them.
 - **Save prompts** (`background/save.ts`): `classifySubmission` decides new / update / nothing. The prompt is kept per tab for 5 minutes, and the next page load asks for it (`pendingSaveBar`). Prompts appear only while unlocked.
 
+### iPhone app (`ios`)
+
+- **Layout:**
+
+| Path | What |
+|---|---|
+| `VPassKit/` | Swift package, Swift 6, no UIKit: crypto (libsodium through swift-sodium's `Clibsodium`), the item model, API client, Login Flow v2, `VaultCache`, `VaultSession`, TOTP, generator, URL matching with a bundled Public Suffix List, the passkey authenticator, the AutoFill catalog, settings, and the `InMemoryServer`/`DemoVault` test doubles. Builds and tests on Linux. |
+| `Shared/` | iOS code compiled into both the app and the extension (no framework target): App Group paths, Keychain stores, Face ID key store, `IdentityStoreSync`, clipboard, shared SwiftUI views |
+| `VPass/` | The app (SwiftUI, Swift 5 mode): `AppModel` plus the views |
+| `VPassAutoFill/` | The credential provider extension: `CredentialProviderViewController` → `AutoFillModel` → SwiftUI |
+| `VPassUITests/` | Simulator smoke tests, run with `-UITestStub` |
+| `project.yml` | XcodeGen spec; the `.xcodeproj` is generated and gitignored. All ids derive from `VPASS_BUNDLE_ID` |
+
+- **Byte compatibility with core:**
+  - Every Swift file in `VPassKit` ports the matching core file and keeps its names. Change both sides together.
+  - `packages/core/scripts/ios-vectors.ts` (a vitest file run by `npm run vectors:ios`) writes `Tests/VPassKitTests/Fixtures/vectors.json` from the real TypeScript code: KDF outputs, envelopes, items with unknown fields, recovery keys, TOTP, URL matching, cards and passkeys. `VectorTests` must reproduce or open each one. Ciphertexts use random nonces, so every run rewrites the file.
+  - `e2e/ios/interop.test.ts` seeds a vault through core, runs `InteropTests` in Docker (`--network host`), then checks Swift's writes with core and `@simplewebauthn/server`.
+- **Item model:** `Item` wraps the decrypted JSON object (`[String: JSONValue]`) with typed accessors, so unknown fields survive edits (`z.looseObject`). `Schema.swift` re-implements the Zod defaults and errors. `JSONValue` has its own parser and serializer that keep integers apart from doubles; Foundation's JSON blurs them differently on Darwin and Linux.
+- **Session:** `VaultSession` (an actor) mirrors the extension's `session.ts` and `vault.ts`: the encrypted cache in a `VaultStore` (a file in the App Group container, `.completeFileProtection`), the vault key and decrypted items in memory only. `save()` turns a 409 into `EditConflictError` with the server copy (the editor keeps the draft); `modifyItem()` re-applies a change once on the server copy, like the extension.
+- **Storage on the phone:** the account and the optional Face ID key are Keychain items in the shared group `$(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared`, `…ThisDeviceOnly`; settings are JSON in the App Group's user defaults. Unsigned simulator builds have no App Group or Keychain group, so `AppGroup` falls back to the app's own folders.
+- **AutoFill:** every request needs the sheet (`provideCredentialWithoutUserInteraction` always answers `userInteractionRequired`), because the vault key sits behind Face ID. Keyboard-bar identities are rebuilt from `credentialIdentities(for:)` after every unlock, sync and edit; the record identifier is the item id. Passkey registration saves the item to the server before completing, refuses PRF/largeBlob requests and answers `matchedExcludedCredential` for excluded ids.
+- **Signing and upload:** Debug and the CI simulator build are unsigned (`CODE_SIGNING_ALLOWED=NO`). Release uses manual signing with the profiles named "V-Pass App Store" and "V-Pass AutoFill App Store"; the workflow installs them from secrets, archives and runs `xcodebuild -exportArchive` with `destination: upload` and the App Store Connect API key.
+
 ## Gotchas found so far
 
 - **vue-tsc bug:** a static attribute containing `//` (for example `placeholder="https://example.com"`) on a component inside `v-for` breaks scope, and the v-for variables report "Cannot find name". Bind it as an expression instead; see `PLACEHOLDER` in `UrlsEditor.vue`.
@@ -375,6 +422,14 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **Version bumps affect the dev instance too:** it mounts `nextcloud-app/`, so after bumping `info.xml` it answers 503 until `make dev-upgrade`.
 - **Store images:** on this machine `system-ui` resolves to a monospace font (Adwaita Mono). `store-images.spec.ts` injects a generic `sans-serif` and serves the fictional `https://mail.northwind.example` through `context.route`, so no real site or port shows up.
 - **Nextcloud 36:** `appinfo/info.xml` caps `max-version` at 35, so it must be bumped for Nextcloud 36.
+- **iPhone app:**
+  - **No local compiler for iOS code.** Only `VPassKit` builds on Linux; the app, the extension and the UI tests are only compiled by the macOS CI job. Keep logic in `VPassKit` where tests can reach it, and keep the iOS layer thin.
+  - **AutoFill capability keys** (`ProvidesPasswords`, `ProvidesPasskeys`, `ProvidesOneTimeCodes`) must sit under `NSExtension > NSExtensionAttributes > ASCredentialProviderExtensionCapabilities`; iOS ignores them anywhere else.
+  - **Extension memory:** AutoFill extensions get far less memory than apps (about 120 MB is reported). Argon2id at 64 MiB is close, so the extension refuses password unlock above 64 MiB and Face ID is the main way in. Not yet measured on a device.
+  - **Swift memberwise initialisers:** a plain `private var x = value` in a view makes its memberwise init private to the file; property-wrapped privates (`@State`, `@Environment`) don't.
+  - **Linux toolchain:** swift-sodium's Linux target links the system libsodium through pkg-config, so the `vpass-swift` image installs `libsodium-dev`. Node 26 can't run core's TypeScript directly (parameter properties), which is why the vector generator is a vitest file.
+  - **URL matching quirk (copied from core on purpose):** a page on the bare registrable domain (`example.com`) never domain-matches a saved subdomain login (`accounts.example.com`); only the reverse does. iOS often asks with bare domains, so AutoFill shows all logins below the matches.
+  - **Export compliance:** App Store Connect asks about encryption for the first build. That answer is the owner's to give; `ITSAppUsesNonExemptEncryption` is deliberately not set in `project.yml` yet.
 
 ## Not done yet (known follow-ups)
 

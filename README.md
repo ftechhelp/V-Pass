@@ -12,6 +12,7 @@ A zero-knowledge password manager that runs as an app inside your own Nextcloud.
   - encrypted file attachments
 - **Import and export:** import from NordPass. Export to an encrypted `.vpass` backup or to CSV.
 - **Chrome extension:** fills logins, one-time codes, cards and addresses; offers to save new logins and changed passwords; generates passwords; and stores and uses website passkeys from the vault.
+- **iPhone app:** browse, search, copy and edit the vault, unlock with Face ID, and fill passwords, 2FA codes and passkeys in Safari and other apps through iOS AutoFill.
 
 ## Security model
 
@@ -36,7 +37,7 @@ VK ─wraps─▶ per-item key ─XChaCha20-Poly1305─▶ item JSON (type, titl
 
 **Known limits:**
 - **The web app trusts the JavaScript that your server sends.** A compromised server could ship modified code. This is the same trade-off as any web vault, Bitwarden's included. The Chrome extension ships its own code, so it does not have this problem.
-- **Signing in to websites with a stored passkey needs the Chrome extension.** A web page cannot answer another site's passkey prompt.
+- **Signing in to websites with a stored passkey needs the Chrome extension or the iPhone app.** A web page cannot answer another site's passkey prompt.
 - **HTTPS is required.** Browsers disable WebCrypto and WebAuthn on plain HTTP.
 
 ## Repository layout
@@ -46,6 +47,7 @@ VK ─wraps─▶ per-item key ─XChaCha20-Poly1305─▶ item JSON (type, titl
 | `packages/core` | `@vpass/core`: crypto, item schemas, NordPass importer, exporters, generator, TOTP, HIBP, health, typed API client. Framework-free, so the browser extension and desktop client can reuse it. |
 | `nextcloud-app` | The Nextcloud app (`appinfo/`, `lib/` PHP, `src/` Vue 3 UI, `templates/`). Installed as `custom_apps/vpass`. |
 | `browser-extension` | The Chrome extension (Manifest V3, Vue 3). Built into `browser-extension/dist`, which you load unpacked. |
+| `ios` | The iPhone app and its AutoFill extension (SwiftUI), plus `VPassKit`, a Swift port of `@vpass/core` that also builds and tests on Linux. |
 | `e2e` | API integration tests (vitest), browser tests (Playwright), the extension's end-to-end tests and the zero-knowledge check. |
 | `dev` | Docker Compose setup for a local Nextcloud 35 with Postgres and Redis. |
 
@@ -106,6 +108,31 @@ You can also connect from the toolbar icon by typing your Nextcloud address.
 - They ignore clicks unless Chrome confirms they are fully visible, which defeats invisible-overlay clickjacking.
 - Websites never get to choose which origin a request counts as.
 
+## iPhone app
+
+The app uses the vault you created in the V-Pass web app, like the Chrome extension: it connects with its own app password (Login Flow v2) and decrypts everything on the phone.
+
+**Install:** it is distributed through **TestFlight** under the owner's Apple developer account. Builds come from GitHub Actions (macOS runners), so no Mac is involved; the one-time Apple setup is in [`ios/SETUP.md`](ios/SETUP.md). TestFlight builds expire after 90 days, and every push that changes the app uploads a fresh one.
+
+**What it does:**
+- **The app:** connect to your Nextcloud, unlock with the master password (or the recovery key), browse folders and categories, search, copy fields, see live 2FA codes, and add or edit logins, notes, cards and personal info with the password generator. Attachments, password health, import and export stay in the web app.
+- **AutoFill** (turn it on in *Settings → General → AutoFill & Passwords → V-Pass*): logins in the keyboard bar and the Passwords sheet, 2FA codes in code fields, and passkeys: signing in with passkeys from the vault (including ones the Chrome extension saved) and saving new ones. A new passkey is saved to Nextcloud before the site gets it.
+
+**Locking:**
+- The app locks when it has been in the background for the chosen time (5 minutes by default, or straight away), and whenever iOS closes it.
+- **Unlock with Face ID** (off by default) keeps the vault key in the iPhone's Keychain behind Face ID. It is never synced or backed up, and iOS deletes it when the enrolled faces change. AutoFill unlocks the same way; with Face ID off, AutoFill asks for the master password.
+
+**What the app stores:**
+
+| Data | Where |
+|---|---|
+| Nextcloud address and the app's app password | The iPhone's Keychain, this device only. Revoke it in Nextcloud under *Settings → Security*, or tap *Disconnect this iPhone*. |
+| Your vault | Ciphertext only, as on the server, in the app's shared container, readable only while the iPhone is unlocked. AutoFill and offline use read it. |
+| The vault key | In memory while unlocked. With Face ID on, also in the Keychain behind Face ID. |
+| AutoFill suggestions | With *Suggestions in the keyboard bar* on (the default), iOS keeps the websites, usernames and passkey ids of your logins on the phone so it can suggest them. Never passwords. Turn it off in the app's settings. |
+
+Copies are kept off Universal Clipboard and expire after the clipboard-clear time (one minute by default).
+
 ## Development
 
 Requires Node 22+ and Docker.
@@ -138,6 +165,8 @@ Dev users:
 | `make test-extension` | Extension unit tests (happy-dom): field detection, filling, submitted credentials, save-prompt decisions, message sender checks |
 | `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP, cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback, "keep unlocked" across restarts, and the web app's "Browser extension" page connecting a fresh browser. |
 | `make zk-check` | Stores a sentinel string through the API, then greps the Postgres dump and Nextcloud's data folder. Any match fails the check. |
+| `make test-ios-kit` | VPassKit, the iPhone app's Swift core, in Docker: unit tests plus vectors produced by `@vpass/core` (`npm run vectors:ios`) that prove both sides read and write the same bytes |
+| `make test-ios-interop` | The Swift client against the dev instance: core seeds a vault, Swift reads and edits it (including a 409), saves a passkey, and core verifies everything it wrote with `@simplewebauthn/server` |
 
 For `make e2e`, run `npx playwright install chromium` once beforehand.
 

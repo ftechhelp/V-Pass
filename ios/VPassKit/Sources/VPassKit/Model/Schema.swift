@@ -11,7 +11,7 @@ public struct SchemaError: Error, LocalizedError, Equatable {
 	public var errorDescription: String? { "\(path): \(message)" }
 }
 
-enum FieldKind {
+enum FieldKind: Sendable {
 	/// `z.string().default('')`
 	case text
 	/// `z.string()` (required)
@@ -32,7 +32,7 @@ enum FieldKind {
 	case enumCatch([String], String)
 }
 
-struct Schema {
+struct Schema: Sendable {
 	let fields: [(String, FieldKind)]
 
 	func normalize(_ value: JSONValue, path: String, now: String) throws -> [String: JSONValue] {
@@ -91,7 +91,7 @@ struct Schema {
 	}
 }
 
-enum Schemas {
+enum Schemas: Sendable {
 	static let customField = Schema(fields: [
 		("label", .text),
 		("type", .enumCatch(["text", "hidden"], "text")),
