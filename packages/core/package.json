@@ -12,7 +12,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vectors:ios": "vitest run -c scripts/vitest.config.ts"
   },
   "dependencies": {
     "@zxcvbn-ts/core": "^4.2.0",

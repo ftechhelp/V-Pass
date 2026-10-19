@@ -6,8 +6,11 @@ BUILD_DIR   := build
 COMPOSE     := docker compose -f dev/docker-compose.yml
 PHP_IMAGE   := composer:2
 OCC         := $(COMPOSE) exec -T -u www-data nextcloud php occ
+IOS_KIT     := ios/VPassKit
+SWIFT_IMAGE := vpass-swift
+SWIFT       := docker run --rm -u $$(id -u):$$(id -g) -e HOME=/tmp -v $(CURDIR)/$(IOS_KIT):/pkg -w /pkg $(SWIFT_IMAGE)
 
-.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-upgrade dev-down dev-reset dev-logs test-api e2e zk-check appstore extension extension-zip test-extension e2e-extension store-images clean
+.PHONY: help install build dev test typecheck lint-php test-php dev-up dev-upgrade dev-down dev-reset dev-logs test-api e2e zk-check appstore extension extension-zip test-extension e2e-extension store-images vectors-ios ios-kit-image test-ios-kit test-ios-interop clean
 
 help: ## Show this help
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -81,6 +84,18 @@ appstore: build extension-zip ## Package build/vpass-<version>.tar.gz for instal
 	find $(BUILD_DIR)/$(APP_ID)/js -name '*.map' -delete
 	tar -czf $(BUILD_DIR)/$(APP_ID)-$(VERSION).tar.gz -C $(BUILD_DIR) $(APP_ID)
 	@echo "Created $(BUILD_DIR)/$(APP_ID)-$(VERSION).tar.gz"
+
+vectors-ios: ## Regenerate the Swift port's test vectors (and its EFF word list) from @vpass/core
+	npm run vectors:ios
+
+ios-kit-image: ## Build the Docker image with Swift + libsodium used for VPassKit's Linux tests
+	docker build -q -t $(SWIFT_IMAGE) $(IOS_KIT)
+
+test-ios-kit: ios-kit-image ## VPassKit (the iPhone app's crypto/API core) unit + vector tests, in Docker
+	$(SWIFT) swift test
+
+test-ios-interop: ios-kit-image ## The Swift client against the dev instance, checked by @vpass/core (needs dev-up)
+	npx vitest run -c e2e/vitest.ios.config.ts
 
 clean: ## Remove build output
 	rm -rf $(BUILD_DIR) $(APP_DIR)/js $(APP_DIR)/extension browser-extension/dist

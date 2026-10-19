@@ -1,0 +1,134 @@
+# XcodeGen spec for the iPhone app (https://github.com/yonaskolb/XcodeGen).
+# The .xcodeproj is generated from this file (`xcodegen` in ios/) and not committed.
+#
+# Bundle ids, the App Group and the Keychain group all derive from VPASS_BUNDLE_ID.
+# Change it here before registering the ids with Apple (see SETUP.md).
+name: VPass
+options:
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    VPASS_BUNDLE_ID: io.github.ftechhelp.vpass
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # The app targets use Swift 5 mode; VPassKit (the package) is Swift 6.
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    # Set by CI (Release) or by you in Xcode.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+packages:
+  VPassKit:
+    path: VPassKit
+targets:
+  VPass:
+    type: application
+    platform: iOS
+    sources:
+      - VPass
+      - Shared
+    dependencies:
+      - package: VPassKit
+      - target: VPassAutoFill
+    info:
+      path: VPass/Info.plist
+      properties:
+        CFBundleDisplayName: V-Pass
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        NSFaceIDUsageDescription: V-Pass uses Face ID to unlock your vault without typing the master password.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        VPassAppGroup: group.$(VPASS_BUNDLE_ID)
+        VPassKeychainGroup: $(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared
+    entitlements:
+      path: VPass/VPass.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(VPASS_BUNDLE_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VPASS_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: V-Pass App Store
+  VPassAutoFill:
+    type: app-extension
+    platform: iOS
+    sources:
+      - VPassAutoFill
+      - Shared
+    dependencies:
+      - package: VPassKit
+      - sdk: AuthenticationServices.framework
+    info:
+      path: VPassAutoFill/Info.plist
+      properties:
+        CFBundleDisplayName: V-Pass
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSFaceIDUsageDescription: V-Pass uses Face ID to unlock your vault without typing the master password.
+        VPassAppGroup: group.$(VPASS_BUNDLE_ID)
+        VPassKeychainGroup: $(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          # iOS only reads these capability keys inside NSExtensionAttributes.
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionShowsConfigurationUI: true
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesPasskeys: true
+              ProvidesOneTimeCodes: true
+    entitlements:
+      path: VPassAutoFill/VPassAutoFill.entitlements
+      properties:
+        com.apple.security.application-groups: [group.$(VPASS_BUNDLE_ID)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VPASS_BUNDLE_ID).autofill
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) APP_EXTENSION
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: V-Pass AutoFill App Store
+  VPassUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - VPassUITests
+    dependencies:
+      - target: VPass
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VPASS_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  VPass:
+    build:
+      targets:
+        VPass: all
+        VPassAutoFill: all
+    test:
+      targets:
+        - VPassUITests
+      gatherCoverageData: false
+    archive:
+      config: Release

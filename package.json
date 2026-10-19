@@ -12,6 +12,7 @@
     "build": "npm run build -w nextcloud-app",
     "dev": "npm run dev -w nextcloud-app",
     "test": "npm test -w @vpass/core",
+    "vectors:ios": "npm run vectors:ios -w @vpass/core",
     "typecheck": "npm run typecheck -w @vpass/core && npm run typecheck -w nextcloud-app && npm run typecheck -w vpass-browser-extension",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "test:api": "vitest run -c e2e/vitest.config.ts",

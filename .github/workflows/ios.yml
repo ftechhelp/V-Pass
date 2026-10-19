@@ -1,0 +1,174 @@
+# The iPhone app (ios/): VPassKit on Linux, the Swift client against a dev
+# Nextcloud, the app and AutoFill extension on a macOS runner (build + simulator
+# UI tests), and on pushes to main a signed upload to TestFlight.
+# The TestFlight job is skipped until the signing secrets exist (ios/SETUP.md).
+name: iOS
+
+on:
+  push:
+    branches: [main, "ios/**"]
+    paths: ["ios/**", "packages/core/**", "e2e/ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", "packages/core/**", "e2e/ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: Upload this commit to TestFlight
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vpasskit-linux:
+    name: VPassKit (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit and vector tests
+        run: make test-ios-kit
+
+  interop:
+    name: Swift client vs dev Nextcloud
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Start Nextcloud 35 with V-Pass
+        run: make dev-up
+      - name: Interop test
+        run: make test-ios-interop
+
+  app:
+    name: App build and UI tests (simulator)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+      - name: VPassKit tests on macOS
+        run: swift test --package-path ios/VPassKit
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen
+      - name: Build and run the UI tests
+        run: |
+          UDID=$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("^iPhone"))] | last | .udid')
+          echo "Simulator: $UDID"
+          xcodebuild test \
+            -project ios/VPass.xcodeproj -scheme VPass \
+            -destination "id=$UDID" \
+            -resultBundlePath "$RUNNER_TEMP/VPass.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VPass-xcresult
+          path: ${{ runner.temp }}/VPass.xcresult
+
+  testflight:
+    name: Upload to TestFlight
+    needs: [vpasskit-linux, interop, app]
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.testflight
+    runs-on: macos-26
+    env:
+      TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+      CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+      PROFILE_APP: ${{ secrets.IOS_PROFILE_APP }}
+      PROFILE_AUTOFILL: ${{ secrets.IOS_PROFILE_AUTOFILL }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - name: Signing secrets present?
+        id: check
+        run: |
+          if [ -z "$CERT_P12" ] || [ -z "$ASC_KEY_P8" ] || [ -z "$TEAM_ID" ]; then
+            echo "::notice::No signing secrets yet (see ios/SETUP.md); skipping the TestFlight upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+      - name: Install the certificate and profiles
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          rm "$RUNNER_TEMP/dist.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            for profile in "$PROFILE_APP" "$PROFILE_AUTOFILL"; do
+              echo "$profile" | base64 --decode > "$RUNNER_TEMP/p.mobileprovision"
+              uuid=$(security cms -D -i "$RUNNER_TEMP/p.mobileprovision" | plutil -extract UUID raw -)
+              cp "$RUNNER_TEMP/p.mobileprovision" "$dir/$uuid.mobileprovision"
+            done
+          done
+          echo "$ASC_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+      - name: Archive
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          brew install xcodegen
+          (cd ios && xcodegen)
+          xcodebuild archive \
+            -project ios/VPass.xcodeproj -scheme VPass -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/VPass.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+      - name: Upload
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          BUNDLE_ID=$(sed -n 's/^ *VPASS_BUNDLE_ID: *//p' ios/project.yml)
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key><string>V-Pass App Store</string>
+              <key>$BUNDLE_ID.autofill</key><string>V-Pass AutoFill App Store</string>
+            </dict>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/VPass.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "::notice::Uploaded build ${{ github.run_number }} to TestFlight."
+      - name: Clean up
+        if: always() && steps.check.outputs.skip != 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
