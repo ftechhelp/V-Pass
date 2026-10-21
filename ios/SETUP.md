@@ -60,9 +60,32 @@ ASC_ISSUER_ID=<issuer id> ios/scripts/signing.sh secrets  # stores them with `gh
 
 This sets `IOS_TEAM_ID`, `IOS_DIST_CERT_P12`, `IOS_DIST_CERT_PASSWORD`, `IOS_PROFILE_APP`, `IOS_PROFILE_AUTOFILL`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` on the repository. Then start a build: GitHub → *Actions* → *iOS* → *Run workflow* with "Upload this commit to TestFlight" ticked (or push to `main`).
 
-## 7. Export compliance (first build only)
+## 7. Export compliance (each build)
 
-The first build waits in App Store Connect with **Missing Compliance** until you answer Apple's encryption questions. V-Pass encrypts your vault itself with libsodium (XChaCha20-Poly1305, Argon2id), on top of HTTPS. The answers are a legal statement, so they are yours to give. Once you know them, add `ITSAppUsesNonExemptEncryption` (and, if Apple gives you one, `ITSEncryptionExportComplianceCode`) to the app's `info.properties` in `ios/project.yml`, and later builds stop asking.
+Uploading to Apple counts as exporting software from the US, and encryption software is export-controlled. Apple therefore asks about encryption for every build. Until you answer, the build shows **Missing Compliance** and nobody, including you, can install it.
+
+**Where:** App Store Connect → *Apps* → V-Pass → *TestFlight* → *Builds* → the build → **Manage**, next to "Missing Compliance".
+
+**What V-Pass uses** (this is what the questions are about):
+- HTTPS, provided by iOS.
+- Its own vault encryption from the open-source libsodium library: XChaCha20-Poly1305, Argon2id and BLAKE2b.
+- P-256 and RSA signatures for passkeys.
+
+All of these are published standards and none is proprietary. In Apple's terms, V-Pass uses *standard encryption algorithms in addition to the encryption within Apple's operating system*. It is **not** in the "only uses Apple's built-in encryption" group, because Apple counts third-party libraries.
+
+**What Apple requires for that group** ([Apple's table](https://developer.apple.com/help/app-store-connect/reference/export-compliance-documentation-for-encryption)): no US documents. A French encryption declaration is needed only if the app is distributed on the App Store in France.
+
+**The dialog** (the wording may differ slightly):
+1. *What type of encryption algorithms does your app implement?* Given the facts above: **Standard encryption algorithms instead of, or in addition to, using or accessing the encryption within Apple's operating system**.
+2. *Is your app going to be available on the App Store in France?* For TestFlight-only use that is **No**. Apple then says no documentation is needed, and you click **Save**.
+
+The answers are a statement you make to Apple about your app, so check them yourself, especially before any public App Store release.
+
+**Why it asks again:** Apple stops asking only in two cases:
+- the app declares `ITSAppUsesNonExemptEncryption = NO`, which Apple allows only for apps without encryption or with exempt encryption, and V-Pass isn't one;
+- the app carries an `ITSEncryptionExportComplianceCode`, which Apple issues only after approving uploaded documents.
+
+So each new build needs the same two answers, which take about a minute.
 
 ## 8. Install it
 

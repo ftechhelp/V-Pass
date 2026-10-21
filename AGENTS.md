@@ -429,7 +429,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - **Swift memberwise initialisers:** a plain `private var x = value` in a view makes its memberwise init private to the file; property-wrapped privates (`@State`, `@Environment`) don't.
   - **Linux toolchain:** swift-sodium's Linux target links the system libsodium through pkg-config, so the `vpass-swift` image installs `libsodium-dev`. Node 26 can't run core's TypeScript directly (parameter properties), which is why the vector generator is a vitest file.
   - **URL matching quirk (copied from core on purpose):** a page on the bare registrable domain (`example.com`) never domain-matches a saved subdomain login (`accounts.example.com`); only the reverse does. iOS often asks with bare domains, so AutoFill shows all logins below the matches.
-  - **Export compliance:** App Store Connect asks about encryption for the first build. That answer is the owner's to give; `ITSAppUsesNonExemptEncryption` is deliberately not set in `project.yml` yet.
+  - **Export compliance:** App Store Connect asks about encryption for every build (`ios/SETUP.md` step 7). libsodium is non-exempt by Apple's definition (it counts linked third-party libraries), so `ITSAppUsesNonExemptEncryption = NO` would be a false statement; don't add it. The prompt goes away only with an `ITSEncryptionExportComplianceCode` from approved documents. The answers are the owner's to give.
 
 ## Not done yet (known follow-ups)
 
