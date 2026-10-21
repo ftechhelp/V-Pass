@@ -50,8 +50,8 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
 | VPassKit (Swift port of core) on Linux, 55 tests | ✅ passing (`make test-ios-kit`, Docker). Includes the vectors from `npm run vectors:ios` |
 | Swift client vs dev Nextcloud | ✅ passing (`make test-ios-interop`): reads core's vault, edits (409 included), saves a passkey; core and `@simplewebauthn/server` verify it |
-| iPhone app + AutoFill extension build, simulator UI tests | ✅ passing in CI on 2026-10-19 (macOS runner, Xcode 26.6, branch `ios/app`): simulator build, VPassKit's 55 tests on macOS, and the 3 XCUITests against the demo vault. Not yet built for a device (`generic/platform=iOS`); the first signed TestFlight archive does that |
-| TestFlight upload | ❌ waits for the owner's Apple Developer account and the secrets in `ios/SETUP.md` |
+| iPhone app + AutoFill extension build, simulator UI tests | ✅ passing in CI on 2026-10-19 (macOS runner, Xcode 26.6, branch `ios/app`): simulator build, VPassKit's 55 tests on macOS, and the 3 XCUITests against the demo vault. The signed device build (`generic/platform=iOS`, Release) archives and exports too; see the TestFlight row |
+| TestFlight upload | ✅ build 3 (0.1.0) uploaded on 2026-10-21 from branch `ios/app` (manual run with the TestFlight box, because the workflow isn't on `main` yet). The signing secrets are set |
 | iPhone app on a real device (Face ID, AutoFill in Safari and apps, passkeys, memory in the extension) | ❌ not tried yet; the checklist is in `ios/SETUP.md` step 9 |
 | Production install | ✅ v0.2.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, and to 0.2.1 (the Chrome Web Store link) on 2026-10-18. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
