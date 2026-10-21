@@ -1,0 +1,92 @@
+# The Chrome extension: unit tests, the end-to-end tests in Chromium against a
+# dev Nextcloud, and on pushes to main an upload of the tested package to the
+# Chrome Web Store, submitted for review, whenever its manifest version is newer
+# than the store's. The upload is skipped until the service account secrets
+# exist (browser-extension/store/LISTING.md, "Automatic uploads").
+name: Chrome extension
+
+on:
+  push:
+    paths: ["browser-extension/**", "packages/core/**", "e2e/extension/**", ".github/workflows/extension.yml"]
+  pull_request:
+    paths: ["browser-extension/**", "packages/core/**", "e2e/extension/**", ".github/workflows/extension.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload this commit to the Chrome Web Store (if its version is newer)
+        type: boolean
+        default: false
+
+concurrency:
+  group: extension-${{ github.ref }}
+  # Never interrupt an upload in progress on main.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit and end-to-end tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: make test-extension
+      - name: Start Nextcloud 35 with V-Pass
+        run: make dev-up
+      - name: End-to-end tests (builds and packages the extension)
+        run: make e2e-extension
+      - name: Keep the tested package
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: build/vpass-extension-*.zip
+          if-no-files-found: error
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-test-results
+          path: e2e/test-results
+          if-no-files-found: ignore
+
+  publish:
+    name: Upload to the Chrome Web Store
+    needs: test
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.publish
+    runs-on: ubuntu-24.04
+    env:
+      CWS_SERVICE_ACCOUNT_KEY: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY }}
+      CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+    steps:
+      - name: Store secrets present?
+        id: check
+        run: |
+          if [ -z "$CWS_SERVICE_ACCOUNT_KEY" ] || [ -z "$CWS_PUBLISHER_ID" ]; then
+            echo "::notice::No Chrome Web Store secrets yet (see browser-extension/store/LISTING.md); skipping the upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - if: steps.check.outputs.skip != 'true'
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          name: extension
+          path: build
+      - name: Upload and submit for review
+        if: steps.check.outputs.skip != 'true'
+        run: node browser-extension/scripts/web-store.ts release build/vpass-extension-*.zip

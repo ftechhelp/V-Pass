@@ -4,8 +4,27 @@ Everything to paste into the [developer dashboard](https://chrome.google.com/web
 
 ## Package
 
-- Upload `build/vpass-extension-<version>.zip`, made by `make extension-zip`.
-- Every upload needs a **higher `version`** in `browser-extension/public/manifest.json` than the previous one.
+Every upload needs a **higher `version`** in `browser-extension/public/manifest.json` than the previous one.
+
+**Automatic uploads.** [`.github/workflows/extension.yml`](../../.github/workflows/extension.yml) runs the extension's unit and end-to-end tests on every push that touches it. On `main`, when the manifest's version is newer than what the store has, it uploads the tested zip and submits it for review; Chrome publishes it once the review passes, keeping the listing's visibility (unlisted).
+- An older version still waiting for review is cancelled and replaced by the newer one.
+- Re-runs, and pushes that don't change the version, upload nothing.
+- From another branch: *Actions → Chrome extension → Run workflow*, with *Upload this commit* ticked.
+- The API only updates this existing item. Listing text, images and privacy answers stay in the dashboard. After changing the visibility in the dashboard, publish once by hand before the API can publish again.
+
+**One-time setup** (until then the upload job is skipped):
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project (or reuse one) and enable the **Chrome Web Store API** under *APIs & Services → Library*.
+2. *IAM & Admin → Service accounts → Create service account*, for example `vpass-web-store`. It needs no roles. Open it, then *Keys → Add key → Create new key → JSON*. (If Google refuses to create a key, an organization policy blocks service account keys.)
+3. In the Developer Dashboard, add the service account's email under *Account*. A publisher can have only one.
+4. Copy the **Publisher ID** from the Developer Dashboard (*Publisher → Settings*).
+5. Store both as GitHub Actions secrets, then delete the downloaded key:
+   ```bash
+   gh secret set CWS_SERVICE_ACCOUNT_KEY < ~/Downloads/<the key>.json
+   gh secret set CWS_PUBLISHER_ID --body '<publisher id>'
+   ```
+6. Check that it works before deleting the key: `CWS_SERVICE_ACCOUNT_KEY="$(cat <the key>.json)" CWS_PUBLISHER_ID=<publisher id> node browser-extension/scripts/web-store.ts status` prints the published and submitted versions.
+
+**By hand:** upload `build/vpass-extension-<version>.zip`, made by `make extension-zip`, under *Package → Upload new package*, then submit it for review.
 
 ## Store listing tab
 

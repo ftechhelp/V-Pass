@@ -20,7 +20,7 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 - **v1 includes** password health + HIBP, TOTP and attachments. **Sharing between users is out of v1**, but per-item keys keep that path open.
 - **Chrome extension:**
   - **Distribution: the Chrome Web Store, unlisted** (owner's decision on 2026-10-16, replacing "load unpacked only").
-    - It's published under the owner's developer account. The owner uploads releases, unless they provide Chrome Web Store API credentials.
+    - It's published under the owner's developer account. Once the owner adds a service account's secrets, pushes to `main` upload releases through the Chrome Web Store API (`.github/workflows/extension.yml`, owner's request on 2026-10-21); until then the owner uploads them by hand.
     - The submission kit is `browser-extension/store/LISTING.md` plus `PRIVACY.md`.
     - The listing is live since 2026-10-18: <https://chromewebstore.google.com/detail/v-pass/fnbnjjalcjpopkiobdkaaffdiccolbfl> (extension id `fnbnjjalcjpopkiobdkaaffdiccolbfl`). Being unlisted, it can only be found through this link.
     - The web app's "Browser extension" page links to it and keeps the bundled zip as a manual-install fallback.
@@ -40,7 +40,8 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 |---|---|
 | `@vpass/core` unit tests (84) | ✅ passing (`npm test`). The authenticator's output is verified with `@simplewebauthn/server` |
 | `tsc` (core, e2e) and `vue-tsc` (app, extension) | ✅ clean |
-| Extension unit tests (27, happy-dom) | ✅ passing (`make test-extension`) |
+| Extension unit tests (33, happy-dom) | ✅ passing (`make test-extension`), including `scripts/web-store.ts` against a mocked Web Store API |
+| Automatic Chrome Web Store upload (`extension.yml`) | ⚠️ the upload itself is untested until the owner adds `CWS_SERVICE_ACCOUNT_KEY` and `CWS_PUBLISHER_ID` (see `browser-extension/store/LISTING.md`). Google's token endpoint accepts the script's signed JWT (it answered "account not found" for a made-up service account) |
 | Extension end-to-end tests (12, Chromium + dev Nextcloud), including scanning a page's 2FA QR code and the web app's "Browser extension" page connecting a fresh browser | ✅ passing (`make e2e-extension`) |
 | Chrome Web Store listing | ✅ published (unlisted) on 2026-10-18 with extension 0.1.0. `CHROME_WEB_STORE_URL` points to it; a Playwright UI test checks the page's "Add to Chrome" link |
 | Extension on real websites (webauthn.io, GitHub passkeys, real login forms, real 2FA setup pages) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
@@ -50,10 +51,10 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
 | VPassKit (Swift port of core) on Linux, 56 tests | ✅ passing (`make test-ios-kit`, Docker). Includes the vectors from `npm run vectors:ios` |
 | Swift client vs dev Nextcloud | ✅ passing (`make test-ios-interop`): reads core's vault, edits (409 included), saves a passkey; core and `@simplewebauthn/server` verify it |
-| iPhone app + AutoFill extension build, simulator UI tests | ✅ passing in CI on 2026-10-19 (macOS runner, Xcode 26.6, branch `ios/app`): simulator build, VPassKit's 55 tests on macOS, and the 3 XCUITests against the demo vault. The signed device build (`generic/platform=iOS`, Release) archives and exports too; see the TestFlight row |
-| TestFlight upload | ✅ build 3 (0.1.0) uploaded on 2026-10-21 from branch `ios/app` (manual run with the TestFlight box, because the workflow isn't on `main` yet). The signing secrets are set |
+| iPhone app + AutoFill extension build, simulator UI tests | ✅ passing in CI on 2026-10-21 (macOS runner, Xcode 26.6, branch `ios/app`): simulator build, VPassKit's tests on macOS (including the CoreImage QR round trip), and the 4 XCUITests against the demo vault (including the QR scanner). The first attempt of that run failed every UI test at launch with "Timed out while acquiring background assertion", a simulator flake; re-running the job passed. The signed device build (`generic/platform=iOS`, Release) archives and exports too; see the TestFlight row |
+| TestFlight upload | ✅ build 6 (0.1.0, 2FA QR scanning) uploaded on 2026-10-21 from branch `ios/app` (manual run with the TestFlight box, because the workflow isn't on `main` yet). The signing secrets are set |
 | iPhone app on a real device (Face ID, AutoFill in Safari and apps, passkeys, memory in the extension, the camera QR scanner) | ❌ not tried yet; the checklist is in `ios/SETUP.md` step 9 |
-| Production install | ✅ v0.2.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, and to 0.2.1 (the Chrome Web Store link) on 2026-10-18. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
+| Production install | ✅ v0.3.0 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, to 0.2.1 (the Chrome Web Store link) on 2026-10-18, and to 0.3.0 (2FA QR scanning; bundles extension 0.2.0) on 2026-10-21. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
 **Ship every tested change to production (standing instruction from the owner).**
 - **When:** once a change is finished and its tests pass on the throwaway dev stack, update V-Pass on the owner's production Nextcloud so they can test it too. Don't wait to be asked.
@@ -85,7 +86,7 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
 8. **Extension changes.**
    1. Bump `version` in `browser-extension/public/manifest.json`. The Chrome Web Store rejects an upload whose version isn't higher than the last one.
    2. `make appstore` (step 4) puts the new zip into the web app's download.
-   3. Hand over `build/vpass-extension-<version>.zip` for the Chrome Web Store: the owner uploads it under *Package → Upload new package* and submits it for review. Use the Web Store API instead if credentials have been set up.
+   3. **Store secrets set:** the extension workflow uploads the tested zip and submits it for review when the change reaches `main` (or by hand: *Run workflow* with *Upload this commit*). Report the run. **No secrets yet:** hand over `build/vpass-extension-<version>.zip`; the owner uploads it under *Package → Upload new package* and submits it for review.
    4. Before review finishes, the owner can test right away with the unpacked `browser-extension/dist` (reload it in `chrome://extensions`).
 9. **Report to the owner:**
    - the version deployed;
@@ -126,6 +127,7 @@ npm run build:extension          # Chrome extension → browser-extension/dist (
 npm run dev:extension            # rebuild the extension on change, then reload it in chrome://extensions
 npm run test:extension           # extension unit tests (vitest + happy-dom)
 make extension-zip               # build/vpass-extension-<version>.zip for the Chrome Web Store (+ the web app's download copy)
+node browser-extension/scripts/web-store.ts status   # what the Chrome Web Store has (needs CWS_SERVICE_ACCOUNT_KEY, CWS_PUBLISHER_ID)
 make store-images                # regenerate the Chrome Web Store screenshots (dev instance must be up)
 make dev-upgrade                 # occ upgrade on the dev instance, needed after an app version bump
 make help                        # all make targets
@@ -449,7 +451,6 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - l10n files.
 
 **Extension follow-ups:**
-- Optionally automate Chrome Web Store uploads with its API (needs the owner's credentials).
 - Try it on real sites and tune `classify.ts`; try QR scanning on real 2FA setup pages.
 - Passkeys in cross-origin iframes.
 - Save prompts while locked (unlock, then save).
