@@ -24,7 +24,6 @@
     "@nextcloud/router": "^3.2.0",
     "@nextcloud/vue": "^9.13.1",
     "@vpass/core": "*",
-    "jsqr": "^1.4.0",
     "pinia": "^4.1.0",
     "vue": "^3.5.44",
     "vue-material-design-icons": "^5.4.0",

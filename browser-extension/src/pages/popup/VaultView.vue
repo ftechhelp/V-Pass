@@ -3,6 +3,7 @@
 		<header class="top">
 			<div class="logo"><ShieldLockIcon :size="22" class="brand" /> V-Pass</div>
 			<div class="grow" />
+			<button class="icon-btn" title="Scan a 2FA QR code on this page" data-test="scan-qr" @click="setupFor = { itemId: null }"><QrcodeScanIcon :size="18" /></button>
 			<button class="icon-btn" :class="{ spinning: syncing }" :title="syncTitle" @click="syncNow"><SyncIcon :size="18" /></button>
 			<button class="icon-btn" title="Open V-Pass on Nextcloud" @click="send('openWebVault')"><OpenInNewIcon :size="18" /></button>
 			<button class="icon-btn" title="Settings" @click="openOptions"><CogIcon :size="18" /></button>
@@ -10,7 +11,7 @@
 		</header>
 
 		<nav class="tabs">
-			<button v-for="t in TABS" :key="t.id" class="tab" :class="{ active: tab === t.id }" :data-test="`tab-${t.id}`" @click="tab = t.id; selected = null">
+			<button v-for="t in TABS" :key="t.id" class="tab" :class="{ active: tab === t.id }" :data-test="`tab-${t.id}`" @click="tab = t.id; selected = null; setupFor = null">
 				{{ t.label }}
 			</button>
 		</nav>
@@ -27,7 +28,17 @@
 		<p v-if="notice" class="note small notice">{{ notice }}</p>
 
 		<main class="body">
-			<ItemDetail v-if="selectedItem" :entry="selectedItem" @back="selected = null" @fill="fill" />
+			<TotpSetup v-if="setupFor"
+				:items="items"
+				:site="site"
+				:item-id="setupFor.itemId"
+				@back="setupFor = null"
+				@saved="totpSaved" />
+			<ItemDetail v-else-if="selectedItem"
+				:entry="selectedItem"
+				@back="selected = null"
+				@fill="fill"
+				@scan="setupFor = { itemId: $event }" />
 
 			<!-- This site -->
 			<template v-else-if="tab === 'site'">
@@ -134,6 +145,7 @@ import LockIcon from 'vue-material-design-icons/Lock.vue'
 import MagnifyIcon from 'vue-material-design-icons/Magnify.vue'
 import NoteTextIcon from 'vue-material-design-icons/NoteText.vue'
 import OpenInNewIcon from 'vue-material-design-icons/OpenInNew.vue'
+import QrcodeScanIcon from 'vue-material-design-icons/QrcodeScan.vue'
 import ShieldLockIcon from 'vue-material-design-icons/ShieldLock.vue'
 import StarIcon from 'vue-material-design-icons/Star.vue'
 import SyncIcon from 'vue-material-design-icons/Sync.vue'
@@ -142,6 +154,7 @@ import { send } from '../../shared/runtime.ts'
 import { useCopy } from '../ui/copy.ts'
 import GeneratorPanel from './GeneratorPanel.vue'
 import ItemDetail from './ItemDetail.vue'
+import TotpSetup from './TotpSetup.vue'
 
 const props = defineProps<{ state: ExtensionState }>()
 const emit = defineEmits<{ update: [state: ExtensionState] }>()
@@ -158,6 +171,8 @@ const items = ref<ItemView[]>([])
 const site = ref<SiteView | null>(null)
 const tab = ref<Tab>('site')
 const selected = ref<string | null>(null)
+/** The "set up a one-time code" view, optionally for one login. */
+const setupFor = ref<{ itemId: string | null } | null>(null)
 const query = ref('')
 const category = ref<Category>('all')
 const syncing = ref(false)
@@ -227,6 +242,12 @@ function openOptions(): void {
 async function copyTotp(itemId: string): Promise<void> {
 	const { code } = await send('totp', { itemId })
 	await copy(code, `t-${itemId}`)
+}
+
+async function totpSaved(itemId: string): Promise<void> {
+	setupFor.value = null
+	await load()
+	selected.value = itemId
 }
 
 async function fill(itemId: string, force = false): Promise<void> {

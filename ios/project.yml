@@ -42,6 +42,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        NSCameraUsageDescription: V-Pass uses the camera to scan two-factor (2FA) QR codes when you set up one-time codes.
         NSFaceIDUsageDescription: V-Pass uses Face ID to unlock your vault without typing the master password.
         UILaunchScreen:
           UIColorName: LaunchBackground

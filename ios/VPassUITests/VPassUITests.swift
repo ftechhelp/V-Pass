@@ -78,4 +78,30 @@ final class VPassUITests: XCTestCase {
 		element(app, "save").tap()
 		XCTAssertTrue(element(app, "value-Password").waitForExistence(timeout: 30))
 	}
+
+	/// The simulator has no camera: the scanner's "Simulate scan" returns DemoVault.setupQRCode.
+	func testScanQrCodeSetsUpOneTimeCodes() {
+		let app = launch()
+		unlock(app)
+		element(app, "new-item").tap()
+		app.buttons["Login"].tap()
+
+		let scan = element(app, "scan-qr")
+		if !scan.waitForExistence(timeout: 10) {
+			app.swipeUp()
+		}
+		XCTAssertTrue(scan.waitForExistence(timeout: 5))
+		scan.tap()
+		let simulate = element(app, "simulate-scan")
+		XCTAssertTrue(simulate.waitForExistence(timeout: 10))
+		simulate.tap()
+
+		// The QR code's issuer and account name the new login.
+		XCTAssertTrue(element(app, "totp-code").waitForExistence(timeout: 10))
+		XCTAssertEqual(element(app, "edit-title").value as? String, "Example")
+		XCTAssertEqual(element(app, "edit-username").value as? String, "alice@example.com")
+		element(app, "save").tap()
+		XCTAssertTrue(element(app, "value-Username").waitForExistence(timeout: 30))
+		XCTAssertTrue(element(app, "totp-code").exists)
+	}
 }

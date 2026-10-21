@@ -26,33 +26,33 @@ V-Pass is a zero-knowledge, NordPass-style password manager that runs as a **Nex
     - The web app's "Browser extension" page links to it and keeps the bundled zip as a manual-install fallback.
   - It unlocks with the master password.
   - The opt-in **"Keep unlocked on this device"** (with a warning) persists the vault key in `chrome.storage.local` until the user locks. This was the owner's explicit choice; keep the warning.
-  - v1 covers login fill, save/update prompts, the generator, TOTP, cards and identities, and passkeys (create, sign in, conditional mediation).
+  - v1 covers login fill, save/update prompts, the generator, TOTP (including setting it up from a page's 2FA QR code), cards and identities, and passkeys (create, sign in, conditional mediation).
 - **iPhone app** (owner's decisions on 2026-10-19):
   - **Native SwiftUI app plus an AutoFill credential provider extension**, minimum iOS 18. A free Apple account can't get the AutoFill entitlement, so the owner is enrolling in the paid Apple Developer Program.
   - **Built in the cloud:** the owner has no Mac. GitHub Actions macOS runners build, test and sign it (`.github/workflows/ios.yml`); the repo is public, so the minutes are free.
   - **Distribution: TestFlight internal testing.** An unlisted App Store release may come later. Builds expire after 90 days.
-  - **v1 scope:** connect, unlock (master password, recovery key, Face ID), browse/search/copy, TOTP, add and edit items with the generator; AutoFill for passwords, one-time codes and passkeys (sign in and save). Attachments, health, import/export, vault creation and changing the master password stay in the web app.
+  - **v1 scope:** connect, unlock (master password, recovery key, Face ID), browse/search/copy, TOTP, add and edit items with the generator, scan 2FA QR codes (camera or screenshot); AutoFill for passwords, one-time codes and passkeys (sign in and save). Attachments, health, import/export, vault creation and changing the master password stay in the web app.
   - **Face ID instead of PRF:** the vault key goes into the Keychain behind `.biometryCurrentSet`, opt-in. PRF unlock passkeys are bound to the Nextcloud hostname and don't fit a native app.
 
 ## Verification status — read this first
 
 | Area | Status |
 |---|---|
-| `@vpass/core` unit tests (80) | ✅ passing (`npm test`). The authenticator's output is verified with `@simplewebauthn/server` |
+| `@vpass/core` unit tests (84) | ✅ passing (`npm test`). The authenticator's output is verified with `@simplewebauthn/server` |
 | `tsc` (core, e2e) and `vue-tsc` (app, extension) | ✅ clean |
 | Extension unit tests (27, happy-dom) | ✅ passing (`make test-extension`) |
-| Extension end-to-end tests (11, Chromium + dev Nextcloud), including the web app's "Browser extension" page connecting a fresh browser | ✅ passing (`make e2e-extension`) |
+| Extension end-to-end tests (12, Chromium + dev Nextcloud), including scanning a page's 2FA QR code and the web app's "Browser extension" page connecting a fresh browser | ✅ passing (`make e2e-extension`) |
 | Chrome Web Store listing | ✅ published (unlisted) on 2026-10-18 with extension 0.1.0. `CHROME_WEB_STORE_URL` points to it; a Playwright UI test checks the page's "Add to Chrome" link |
-| Extension on real websites (webauthn.io, GitHub passkeys, real login forms) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
+| Extension on real websites (webauthn.io, GitHub passkeys, real login forms, real 2FA setup pages) | ❌ not tried yet. Field detection is heuristic, so expect per-site fixes |
 | Vite production build | ✅ builds `nextcloud-app/js/vpass-main.mjs` and `vpass-admin.mjs` |
 | `make lint-php`, PHPUnit (31) | ✅ passing |
 | Migration + API tests, Playwright UI tests, zero-knowledge check (`e2e/`) | ✅ passing on Nextcloud 35.0.2 with Postgres 17 (dev stack) and MariaDB 11.4 (one-off stack); zk-check only runs on Postgres (`pg_dump`) |
 | Real NordPass export | ❌ importer only tested against a synthetic fixture |
-| VPassKit (Swift port of core) on Linux, 55 tests | ✅ passing (`make test-ios-kit`, Docker). Includes the vectors from `npm run vectors:ios` |
+| VPassKit (Swift port of core) on Linux, 56 tests | ✅ passing (`make test-ios-kit`, Docker). Includes the vectors from `npm run vectors:ios` |
 | Swift client vs dev Nextcloud | ✅ passing (`make test-ios-interop`): reads core's vault, edits (409 included), saves a passkey; core and `@simplewebauthn/server` verify it |
 | iPhone app + AutoFill extension build, simulator UI tests | ✅ passing in CI on 2026-10-19 (macOS runner, Xcode 26.6, branch `ios/app`): simulator build, VPassKit's 55 tests on macOS, and the 3 XCUITests against the demo vault. The signed device build (`generic/platform=iOS`, Release) archives and exports too; see the TestFlight row |
 | TestFlight upload | ✅ build 3 (0.1.0) uploaded on 2026-10-21 from branch `ios/app` (manual run with the TestFlight box, because the workflow isn't on `main` yet). The signing secrets are set |
-| iPhone app on a real device (Face ID, AutoFill in Safari and apps, passkeys, memory in the extension) | ❌ not tried yet; the checklist is in `ios/SETUP.md` step 9 |
+| iPhone app on a real device (Face ID, AutoFill in Safari and apps, passkeys, memory in the extension, the camera QR scanner) | ❌ not tried yet; the checklist is in `ios/SETUP.md` step 9 |
 | Production install | ✅ v0.2.1 on the owner's Nextcloud (35.0.2, MariaDB 11.4): installed as 0.1.0 on 2026-10-16, then updated to 0.1.1 and 0.2.0 (the "Browser extension" page) the same day, and to 0.2.1 (the Chrome Web Store link) on 2026-10-18. It shares this Docker host with other production services. Apart from the V-Pass update procedure below, never change it, or any container outside the `vpass-dev` compose project, without asking |
 
 **Ship every tested change to production (standing instruction from the owner).**
@@ -356,6 +356,11 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
   - Nothing happens if the extension is already connected.
 - **Passkey requests that need PRF, largeBlob, hmac-secret or credBlob** go straight to the browser, because V-Pass's authenticator can't provide them.
 - **Save prompts** (`background/save.ts`): `classifySubmission` decides new / update / nothing. The prompt is kept per tab for 5 minutes, and the next page load asks for it (`pendingSaveBar`). Prompts appear only while unlocked.
+- **Setting up 2FA from a QR code** (`background/totp-setup.ts`, popup `TotpSetup.vue`): the extension's only way to edit a login's TOTP, since the popup has no item editor.
+  - `scanQr` captures the active tab with `chrome.tabs.captureVisibleTab` (allowed by the `<all_urls>` host permission; no extra permission) and decodes it in the service worker with core's `readTotpQr` (jsQR, on an `OffscreenCanvas`). The screenshot never leaves the worker; the popup gets only the QR code's text, issuer and account.
+  - HiDPI screenshots are decoded at the tab's CSS width first (jsQR takes seconds on a 4K image), then at full size if nothing was found.
+  - `saveTotp` stores the key in an existing login (`modifyItem`, so a 409 re-applies it once) or creates a login titled after the QR code's issuer. The popup preselects this site's login and warns when a code would be replaced; a paste field covers keys shown as text.
+  - Opened from the header's QR button or from a login's details.
 
 ### iPhone app (`ios`)
 
@@ -377,6 +382,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **Item model:** `Item` wraps the decrypted JSON object (`[String: JSONValue]`) with typed accessors, so unknown fields survive edits (`z.looseObject`). `Schema.swift` re-implements the Zod defaults and errors. `JSONValue` has its own parser and serializer that keep integers apart from doubles; Foundation's JSON blurs them differently on Darwin and Linux.
 - **Session:** `VaultSession` (an actor) mirrors the extension's `session.ts` and `vault.ts`: the encrypted cache in a `VaultStore` (a file in the App Group container, `.completeFileProtection`), the vault key and decrypted items in memory only. `save()` turns a 409 into `EditConflictError` with the server copy (the editor keeps the draft); `modifyItem()` re-applies a change once on the server copy, like the extension.
 - **Storage on the phone:** the account and the optional Face ID key are Keychain items in the shared group `$(AppIdentifierPrefix)$(VPASS_BUNDLE_ID).shared`, `…ThisDeviceOnly`; settings are JSON in the App Group's user defaults. Unsigned simulator builds have no App Group or Keychain group, so `AppGroup` falls back to the app's own folders.
+- **QR scanner** (`VPass/Views/QrScannerView.swift`, app only; the AutoFill extension has no editor): the login editor's *Scan QR code* opens VisionKit's `DataScannerViewController` (QR only), or a `PhotosPicker` for screenshots (out of process, so no photo-library permission), which is the way in when the QR code is on the phone's own screen. VPassKit's `firstTotp(in:)` picks the first payload `parseTotp` accepts and `qrPayloads(inImageData:)` reads images with CoreImage (Apple platforms only, so its test runs in the macOS CI job). A scan also fills an empty title and username from the issuer and account. Camera access is asked for only where the scanner is supported, so the simulator never shows the prompt; under `-UITestStub` a *Simulate scan* button returns `DemoVault.setupQRCode`. `NSCameraUsageDescription` is in `project.yml`.
 - **AutoFill:** every request needs the sheet (`provideCredentialWithoutUserInteraction` always answers `userInteractionRequired`), because the vault key sits behind Face ID. Keyboard-bar identities are rebuilt from `credentialIdentities(for:)` after every unlock, sync and edit; the record identifier is the item id. Passkey registration saves the item to the server before completing, refuses PRF/largeBlob requests and answers `matchedExcludedCredential` for excluded ids.
 - **Signing and upload:** Debug and the CI simulator build are unsigned (`CODE_SIGNING_ALLOWED=NO`). Release uses manual signing with the profiles named "V-Pass App Store" and "V-Pass AutoFill App Store"; the workflow installs them from secrets, archives and runs `xcodebuild -exportArchive` with `destination: upload` and the App Store Connect API key.
 
@@ -408,6 +414,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 - **CSV export:** it deliberately does **not** escape spreadsheet formulas, because it is meant for import into other password managers.
 - **PRF unlock passkeys** are bound to the Nextcloud hostname (rpId), so the extension and desktop client need their own unlock methods. The extension uses the master password, plus the opt-in Keep unlocked.
 - **Extension, Node vs Chrome:** Node's `URL` gives `chrome-extension://` URLs a `"null"` origin. The router compares against the `chrome.runtime.getURL('')` prefix instead.
+- **Extension messages can't have a `target` key:** the router ignores those as offscreen-document messages, and the sender gets "V-Pass did not answer". That's why `saveTotp` takes `into`, not `target`.
 - **Extension tests (Playwright):**
   - Launch with `chromium.launchPersistentContext(dir, { channel: 'chromium', args: ['--load-extension=…'] })`. New headless supports extensions.
   - The V-Pass UI is in a **closed** shadow root, so locators can't reach it. Use `page.frames()` for the iframes, and mouse coordinates for the field icon (`clickFieldIcon`).
@@ -443,7 +450,7 @@ The TypeScript side (`model/records.ts` + `api/client.ts`) mirrors the PHP side:
 
 **Extension follow-ups:**
 - Optionally automate Chrome Web Store uploads with its API (needs the owner's credentials).
-- Try it on real sites and tune `classify.ts`.
+- Try it on real sites and tune `classify.ts`; try QR scanning on real 2FA setup pages.
 - Passkeys in cross-origin iframes.
 - Save prompts while locked (unlock, then save).
 - The PRF/largeBlob extensions for sites.

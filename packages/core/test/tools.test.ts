@@ -1,6 +1,8 @@
+import QRCode from 'qrcode'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
 	InvalidTotpError,
+	NoQrCodeError,
 	analyzePasswords,
 	buildOtpauthUri,
 	checkBreaches,
@@ -13,6 +15,7 @@ import {
 	parseRange,
 	parseTotp,
 	pwnedCount,
+	readTotpQr,
 	sha1Hex,
 	totpCode,
 	utf8Encode,
@@ -92,6 +95,47 @@ describe('TOTP (RFC 6238 appendix B vectors)', () => {
 		expect(() => parseTotp('not a secret!')).toThrow(InvalidTotpError)
 		expect(() => parseTotp('otpauth://hotp/x?secret=GEZDGNBV&counter=1')).toThrow(InvalidTotpError)
 		expect(() => parseTotp('otpauth://totp/x')).toThrow(InvalidTotpError)
+	})
+})
+
+/** Render a QR code as RGBA pixels (4 px per module, 4-module quiet zone), like a screenshot of one. */
+function qrImage(text: string, inverted = false) {
+	const { modules } = QRCode.create(text)
+	const scale = 4
+	const size = (modules.size + 8) * scale
+	const data = new Uint8ClampedArray(size * size * 4)
+	for (let y = 0; y < size; y++) {
+		for (let x = 0; x < size; x++) {
+			const row = Math.floor(y / scale) - 4
+			const col = Math.floor(x / scale) - 4
+			const inside = row >= 0 && col >= 0 && row < modules.size && col < modules.size
+			const dark = (inside && modules.get(row, col) === 1) !== inverted
+			data.fill(dark ? 0 : 255, (y * size + x) * 4, (y * size + x) * 4 + 3)
+			data[(y * size + x) * 4 + 3] = 255
+		}
+	}
+	return { data, width: size, height: size }
+}
+
+describe('reading authenticator QR codes', () => {
+	const uri = 'otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example'
+
+	it('returns the otpauth link as encoded', async () => {
+		expect(await readTotpQr(qrImage(uri))).toBe(uri)
+	})
+
+	it('reads light-on-dark codes too', async () => {
+		expect(await readTotpQr(qrImage(uri, true))).toBe(uri)
+	})
+
+	it('rejects QR codes that are not authenticator keys', async () => {
+		await expect(readTotpQr(qrImage('https://example.com/'))).rejects.toThrow(InvalidTotpError)
+		await expect(readTotpQr(qrImage('otpauth://hotp/x?secret=GEZDGNBV&counter=1'))).rejects.toThrow(InvalidTotpError)
+	})
+
+	it('reports an image without a QR code', async () => {
+		const blank = { data: new Uint8ClampedArray(64 * 64 * 4).fill(255), width: 64, height: 64 }
+		await expect(readTotpQr(blank)).rejects.toThrow(NoQrCodeError)
 	})
 })
 

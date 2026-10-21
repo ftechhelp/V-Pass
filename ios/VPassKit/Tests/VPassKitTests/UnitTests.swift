@@ -4,6 +4,10 @@ import FoundationNetworking
 #endif
 import XCTest
 @testable import VPassKit
+#if canImport(CoreImage)
+import CoreGraphics
+import CoreImage
+#endif
 
 final class JSONTests: XCTestCase {
 	func testRoundTripKeepsIntegersAndUnicode() throws {
@@ -334,6 +338,13 @@ final class ToolTests: XCTestCase {
 		XCTAssertEqual(formatTotpCode("12345678"), "1234 5678")
 	}
 
+	func testFirstTotpSkipsOtherQRCodes() {
+		let uri = "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example"
+		XCTAssertEqual(firstTotp(in: ["https://example.com/app", "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP", uri]), uri)
+		XCTAssertNil(firstTotp(in: ["https://example.com/app"]))
+		XCTAssertNil(firstTotp(in: []))
+	}
+
 	func testMatchLoginsOrder() throws {
 		func login(_ title: String, _ urls: [String]) throws -> Item {
 			var item = Item.new(.login)
@@ -352,3 +363,24 @@ final class ToolTests: XCTestCase {
 		XCTAssertEqual(matches.map(\.entry.title), ["a-origin", "c-host", "b-domain"])
 	}
 }
+
+#if canImport(CoreImage)
+/// Apple platforms only (CI's macOS job): reading a QR code from a picture, as the app's scanner does with a screenshot.
+final class QRImageTests: XCTestCase {
+	func testReadsAuthenticatorQRCodeFromAnImage() throws {
+		let uri = "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example"
+		let generator = try XCTUnwrap(CIFilter(name: "CIQRCodeGenerator"))
+		generator.setValue(Data(uri.utf8), forKey: "inputMessage")
+		generator.setValue("M", forKey: "inputCorrectionLevel")
+		let code = try XCTUnwrap(generator.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+		// A white margin around it, like a screenshot of a web page.
+		let page = CIImage(color: CIColor(red: 1, green: 1, blue: 1)).cropped(to: code.extent.insetBy(dx: -80, dy: -80))
+		let sRGB = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+		let png = try XCTUnwrap(CIContext().pngRepresentation(of: code.composited(over: page), format: .RGBA8, colorSpace: sRGB, options: [:]))
+
+		XCTAssertEqual(qrPayloads(inImageData: png), [uri])
+		XCTAssertEqual(firstTotp(in: qrPayloads(inImageData: png)), uri)
+		XCTAssertEqual(qrPayloads(inImageData: Data("not an image".utf8)), [])
+	}
+}
+#endif

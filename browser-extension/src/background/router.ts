@@ -28,6 +28,7 @@ import { barRespond, barView, pendingBar, submitted } from './save.ts'
 import { isUnlocked, lock, setKeepUnlocked, unlock } from './session.ts'
 import { getSettings, neverSaveList, removeNeverSave, setSettings } from './settings.ts'
 import { local } from './storage.ts'
+import { saveTotp, scanActiveTab } from './totp-setup.ts'
 import { clearVault, itemViews, sync } from './vault.ts'
 import { webAppConnect, webAppStatus } from './webapp.ts'
 
@@ -121,6 +122,8 @@ const pageHandlers: Handlers<UiMessages> = {
 	site: () => siteView(),
 	fill: ({ itemId, force }) => fillItem(itemId, force ?? false),
 	totp: ({ itemId }) => totpFor(itemId),
+	scanQr: () => scanActiveTab(),
+	saveTotp: ({ totp, into }) => saveTotp(totp, into),
 	copied: () => scheduleClear(),
 	generate: () => generateFromSettings(),
 	fillGenerated: ({ password }) => fillGeneratedIntoFocused(password),

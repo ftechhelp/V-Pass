@@ -106,3 +106,4 @@ These are the checks only a real iPhone can do:
 5. Use a passkey made by the Chrome extension on the iPhone.
 6. Edit the same item on the phone and in the web app at the same time and save both: the phone says it was changed elsewhere.
 7. AutoFill with Face ID off (master password inside the AutoFill sheet). Argon2id needs 64 MiB, and AutoFill gets much less memory than the app; if the sheet crashes, say so.
+8. Add or edit a login and tap *Scan QR code*: scan a site's 2FA QR code on a computer screen with the camera (the first scan asks for camera access), then do it again from a screenshot with *Choose a screenshot*. The codes V-Pass shows match the ones the site accepts.

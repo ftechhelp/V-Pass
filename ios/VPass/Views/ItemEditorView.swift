@@ -20,6 +20,7 @@ struct ItemEditorView: View {
 	@State private var saving = false
 	@State private var error: String?
 	@State private var showGenerator = false
+	@State private var showScanner = false
 	@State private var revealPassword = false
 	@State private var newFolderName = ""
 	@State private var askFolderName = false
@@ -106,6 +107,9 @@ struct ItemEditorView: View {
 					revealPassword = true
 				}
 			}
+			.sheet(isPresented: $showScanner) {
+				QrScannerView(onScan: useScannedKey)
+			}
 			.alert("New folder", isPresented: $askFolderName) {
 				TextField("Name", text: $newFolderName)
 				Button("Create") {
@@ -175,6 +179,13 @@ struct ItemEditorView: View {
 				.textInputAutocapitalization(.never)
 				.autocorrectionDisabled()
 				.font(.system(.body, design: .monospaced))
+				.accessibilityIdentifier("edit-totp")
+			Button {
+				showScanner = true
+			} label: {
+				Label("Scan QR code", systemImage: "qrcode.viewfinder")
+			}
+			.accessibilityIdentifier("scan-qr")
 			if totpInvalid {
 				Text("Not a valid authenticator key or otpauth:// link").font(.footnote).foregroundStyle(.red)
 			} else if !draft.totp.isEmpty {
@@ -182,6 +193,18 @@ struct ItemEditorView: View {
 			}
 		} header: {
 			Text("One-time codes (2FA)")
+		}
+	}
+
+	/// A scanned key also names a new login: the QR code carries the site (issuer) and the account.
+	private func useScannedKey(_ uri: String) {
+		draft.totp = uri
+		guard let params = try? parseTotp(uri) else { return }
+		if draft.title.trimmingCharacters(in: .whitespaces).isEmpty {
+			draft.title = params.issuer
+		}
+		if draft.username.trimmingCharacters(in: .whitespaces).isEmpty {
+			draft.username = params.account
 		}
 	}
 

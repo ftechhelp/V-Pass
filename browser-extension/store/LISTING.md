@@ -31,6 +31,7 @@ V-Pass is a zero-knowledge password manager that runs on your own Nextcloud. Thi
 • Save new logins and update changed passwords as you sign in
 • Generate strong passwords and passphrases
 • Fill two-factor (TOTP) codes, payment cards and addresses
+• Set up two-factor codes by scanning the QR code a site shows, right from the toolbar button
 • Create and use passkeys stored in your vault, on any computer, or hand the request to your phone or security key
 
 Your vault stays yours
@@ -77,7 +78,8 @@ All of this runs on the device. Page content and browsing history are never coll
 
 <all_urls>:
 - lets the extension sync the end-to-end encrypted vault with the user's own Nextcloud server, whose address is only known once the user enters it;
-- lets it add its content scripts to tabs that were already open when it was installed or updated.
+- lets it add its content scripts to tabs that were already open when it was installed or updated;
+- lets it capture the visible part of the current tab, only when the user clicks "Scan QR code", to read a two-factor (2FA) setup QR code on the device. The image is discarded straight away and never stored or sent.
 ```
 
 **Remote code:** "No, I am not using remote code." All code ships in the package. The bundled libsodium WebAssembly runs under MV3's `wasm-unsafe-eval`; `eval` and remote scripts are not used.

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apiFor } from '../helpers.ts'
 import { BASE_URL, type Harness, LOGIN, MASTER, expect, extensionUrl, launch, openPopup, test, vpassFrame } from './fixtures.ts'
+import { TOTP_SETUP_URI } from './site.ts'
 
 /*
  * The Chrome extension against the dev Nextcloud (make dev-up) and a local test
@@ -211,6 +212,39 @@ test('"Use another device" hands the request to the browser', async ({ harness: 
 	await expect(page.locator('#result')).toHaveText('registered')
 	expect(h.site.credentials.find((c) => c.username === 'carol@example.com')).toBeTruthy()
 	expect((await vault(h)).some((i) => i.type === 'login' && i.passkeys.some((p) => p.userName === 'carol@example.com'))).toBe(false)
+	await page.close()
+})
+
+test('sets up a one-time code from the page\'s 2FA QR code, or from a pasted key', async ({ harness: h }) => {
+	const page = await h.context.newPage()
+	await page.goto(`${h.site.origin}/2fa-setup`)
+	const popup = await openPopup(h, page)
+
+	// The site's QR code goes into its login, replacing the old key.
+	await popup.locator('[data-test="scan-qr"]').click()
+	await expect(popup.locator('[data-test="totp-scan-result"]')).toContainText('Test site')
+	await expect(popup.locator('[data-test="totp-scan-result"]')).toContainText(LOGIN.username)
+	await popup.locator('[data-test="totp-target-Test site"]').click()
+	await expect(popup.locator('[data-test="totp-replaces"]')).toBeVisible()
+	await popup.locator('[data-test="save-totp"]').click()
+	const params = parseTotp(TOTP_SETUP_URI)
+	const valid = [(await totpCode(params)).code, (await totpCode(params, Date.now() - 30_000)).code]
+	await expect.poll(async () => (await popup.locator('[data-test="totp-code"]').textContent())?.replace(/\s/g, '')).toMatch(/^\d{6}$/)
+	expect(valid).toContain((await popup.locator('[data-test="totp-code"]').textContent())!.replace(/\s/g, ''))
+	expect((await siteLogin(h)).totp).toBe(TOTP_SETUP_URI)
+
+	// No QR code on the page: paste the key instead.
+	await page.goto(`${h.site.origin}/login`)
+	await popup.reload()
+	await popup.locator('[data-test="scan-qr"]').click()
+	await expect(popup.locator('[data-test="totp-scan-error"]')).toContainText('No QR code found')
+	await popup.locator('[data-test="totp-key"]').fill('mzxw 6ytb oi')
+	await popup.locator('[data-test^="totp-target-"]', { hasText: 'bob@example.com' }).click()
+	await popup.locator('[data-test="save-totp"]').click()
+	await expect(popup.locator('[data-test="totp-code"]')).toBeVisible()
+	expect((await siteLogin(h, 'bob@example.com')).totp).toBe('mzxw 6ytb oi')
+
+	await popup.close()
 	await page.close()
 })
 

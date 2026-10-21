@@ -1,5 +1,6 @@
 import { type Page, expect, test } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import QRCode from 'qrcode'
 import { type TestUser, createTestUser, deleteTestUser } from '../helpers.ts'
 
 const MASTER = 'orbit velvet cactus lantern 91'
@@ -59,8 +60,13 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 		await field(page, 'field-password').fill('s3cret-Pa55word!')
 		await page.getByRole('button', { name: 'Add website' }).click()
 		await field(page, 'field-url').fill('https://github.com')
+		// A screenshot of the site's 2FA QR code fills the authenticator key.
+		const totp = 'otpauth://totp/GitHub:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub'
+		await page.locator('[data-test="totp-qr-file"]').setInputFiles({ name: 'qr.png', mimeType: 'image/png', buffer: await QRCode.toBuffer(totp) })
+		await expect(field(page, 'field-totp')).toHaveValue(totp)
 		await page.locator('[data-test="save-item"]').click()
 		await expect(page.getByRole('heading', { name: 'GitHub' })).toBeVisible()
+		await expect(page.locator('[data-test="totp-code"]')).toHaveText(/^\d{3} \d{3}$/)
 		await page.getByRole('button', { name: 'Show Password' }).click()
 		await expect(page.locator('[data-test="field-password"]')).toContainText('s3cret-Pa55word!')
 	})

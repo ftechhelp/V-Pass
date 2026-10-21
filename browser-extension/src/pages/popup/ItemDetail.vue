@@ -12,7 +12,14 @@
 			<FieldRow label="Password" :value="login.password" secret />
 			<FieldRow v-if="login.totp" label="One-time code" :value="totpNow || '…'" :copy-value="totpNow">
 				<TotpCode :item-id="entry.id" @code="totpNow = $event" />
+				<template #actions>
+					<button class="icon-btn" title="Replace with a QR code on this page" data-test="detail-scan-qr" @click="emit('scan', entry.id)"><QrcodeScanIcon :size="18" /></button>
+				</template>
 			</FieldRow>
+			<div v-else class="block row">
+				<span class="grow label">One-time code</span>
+				<button class="btn link" data-test="detail-scan-qr" @click="emit('scan', entry.id)"><QrcodeScanIcon :size="18" /> Scan QR code</button>
+			</div>
 			<div v-if="login.urls.length" class="block">
 				<div class="label">Websites</div>
 				<a v-for="url in login.urls" :key="url" class="url ellipsis" :href="normaliseUrl(url)" target="_blank" rel="noopener noreferrer">{{ url }}</a>
@@ -54,12 +61,13 @@ import { type CardItem, type IdentityItem, type LoginItem, formatCardNumber, ful
 import { computed, ref } from 'vue'
 import ArrowLeftIcon from 'vue-material-design-icons/ArrowLeft.vue'
 import FingerprintIcon from 'vue-material-design-icons/Fingerprint.vue'
+import QrcodeScanIcon from 'vue-material-design-icons/QrcodeScan.vue'
 import type { ItemView } from '../../shared/protocol.ts'
 import TotpCode from '../ui/TotpCode.vue'
 import FieldRow from './FieldRow.vue'
 
 const props = defineProps<{ entry: ItemView }>()
-const emit = defineEmits<{ back: [], fill: [itemId: string] }>()
+const emit = defineEmits<{ back: [], fill: [itemId: string], scan: [itemId: string] }>()
 
 const totpNow = ref('')
 // Typed views: templates don't narrow the item union.

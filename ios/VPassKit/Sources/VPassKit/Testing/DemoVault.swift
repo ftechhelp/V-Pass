@@ -5,6 +5,8 @@ import Foundation
 public enum DemoVault {
 	public static let masterPassword = "demo master password"
 	public static let account = Account(server: "https://demo.invalid", loginName: "demo", appPassword: "demo")
+	/// What the QR scanner's "Simulate scan" returns in UI-test mode (the simulator has no camera).
+	public static let setupQRCode = "otpauth://totp/Example:alice@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Example"
 
 	public static func makeServer() async throws -> InMemoryServer {
 		let kdf = try newKdfParams(opsLimit: 2, memLimit: 32 * 1024 * 1024)

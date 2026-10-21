@@ -11,11 +11,12 @@ import { readFileSync } from 'node:fs'
 import { type IncomingMessage, type ServerResponse, createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
+import QRCode from 'qrcode'
 
 /**
  * A tiny website for the extension tests, on http://localhost:<port> (a secure
  * context, so WebAuthn works). Forms cover login, sign-up, password change,
- * one-time codes, checkout and addresses; the WebAuthn pages use
+ * one-time codes, 2FA setup, checkout and addresses; the WebAuthn pages use
  * @simplewebauthn/browser, like many real sites, and the server verifies every
  * response with @simplewebauthn/server.
  */
@@ -28,6 +29,22 @@ const SWA_BUNDLE = readFileSync(`${SWA_DIR}dist/bundle/index.umd.min.js`, 'utf8'
 const page = (title: string, body: string) => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>body{font-family:sans-serif;max-width:480px;margin:40px auto}label{display:block;margin:10px 0}input,select{display:block;width:100%;padding:6px;font-size:15px}</style>
 </head><body><h1>${title}</h1>${body}</body></html>`
+
+/** The authenticator key the 2FA setup page shows as a QR code. */
+export const TOTP_SETUP_URI = 'otpauth://totp/Test%20site:alice@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Test%20site'
+
+/** A QR code as inline SVG, the way sites show authenticator keys. */
+function qrSvg(text: string): string {
+	const { modules } = QRCode.create(text)
+	let path = ''
+	for (let row = 0; row < modules.size; row++) {
+		for (let col = 0; col < modules.size; col++) {
+			if (modules.get(row, col)) path += `M${col + 4} ${row + 4}h1v1h-1z`
+		}
+	}
+	const size = modules.size + 8
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="240" height="240" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`
+}
 
 const PAGES: Record<string, string> = {
 	'/login': page('Log in', `
@@ -55,6 +72,13 @@ const PAGES: Record<string, string> = {
 <form method="post" action="/welcome">
 	<label>Authentication code <input name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
 	<button type="submit">Verify</button>
+</form>`),
+	'/2fa-setup': page('Set up two-factor authentication', `
+<p>Scan this QR code with your authenticator app, then enter the code it shows.</p>
+${qrSvg(TOTP_SETUP_URI)}
+<form method="post" action="/welcome">
+	<label>Code <input name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
+	<button type="submit">Turn on</button>
 </form>`),
 	'/checkout': page('Checkout', `
 <form onsubmit="return false">

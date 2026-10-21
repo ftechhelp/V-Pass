@@ -8,7 +8,8 @@
 				:error="invalid"
 				:helper-text="invalid ? t('vpass', 'This is not a valid authenticator key') : ''"
 				autocomplete="off"
-				spellcheck="false" />
+				spellcheck="false"
+				data-test="field-totp" />
 			<NcButton variant="secondary"
 				:aria-label="t('vpass', 'Read QR code from an image')"
 				:title="t('vpass', 'Read QR code from a screenshot')"
@@ -21,6 +22,7 @@
 				type="file"
 				accept="image/*"
 				class="hidden-visually"
+				data-test="totp-qr-file"
 				@change="readQr">
 		</div>
 		<TotpDisplay v-if="model && !invalid" :uri="model" />
@@ -32,7 +34,7 @@ import { showError } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { parseTotp } from '@vpass/core'
+import { NoQrCodeError, parseTotp, readTotpQr } from '@vpass/core'
 import { computed, ref } from 'vue'
 import QrcodeScanIcon from 'vue-material-design-icons/QrcodeScan.vue'
 import TotpDisplay from './TotpDisplay.vue'
@@ -57,23 +59,17 @@ async function readQr(event: Event): Promise<void> {
 	input.value = ''
 	if (!file) return
 	try {
-		const { default: jsQR } = await import('jsqr')
 		const bitmap = await createImageBitmap(file)
 		const canvas = document.createElement('canvas')
 		canvas.width = bitmap.width
 		canvas.height = bitmap.height
 		const ctx = canvas.getContext('2d')!
 		ctx.drawImage(bitmap, 0, 0)
-		const image = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
-		const result = jsQR(image.data, image.width, image.height)
-		if (!result?.data) {
-			showError(t('vpass', 'No QR code found in this image'))
-			return
-		}
-		parseTotp(result.data)
-		model.value = result.data
-	} catch {
-		showError(t('vpass', 'The QR code does not contain an authenticator key'))
+		model.value = await readTotpQr(ctx.getImageData(0, 0, bitmap.width, bitmap.height))
+	} catch (e) {
+		showError(e instanceof NoQrCodeError
+			? t('vpass', 'No QR code found in this image')
+			: t('vpass', 'The QR code does not contain an authenticator key'))
 	}
 }
 </script>

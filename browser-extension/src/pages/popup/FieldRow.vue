@@ -6,6 +6,7 @@
 				<slot>{{ secret && !revealed ? '•'.repeat(Math.min(value.length, 16)) : value }}</slot>
 			</div>
 		</div>
+		<slot name="actions" />
 		<button v-if="secret" class="icon-btn" :title="revealed ? 'Hide' : 'Show'" @click="revealed = !revealed">
 			<EyeOffIcon v-if="revealed" :size="18" />
 			<EyeIcon v-else :size="18" />

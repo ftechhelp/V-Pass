@@ -1,6 +1,6 @@
 # V-Pass privacy policy
 
-*Effective 16 October 2026. Applies to the V-Pass browser extension and the V-Pass app for Nextcloud.*
+*Effective 21 October 2026. Applies to the V-Pass browser extension and the V-Pass app for Nextcloud.*
 
 V-Pass is a free, open-source password manager. It runs on a Nextcloud server that you or your organization operate. The developer of V-Pass runs **no servers** and **receives no data** from you: no account, no analytics, no telemetry, no crash reports and no advertising.
 
@@ -29,6 +29,7 @@ V-Pass is a free, open-source password manager. It runs on a Nextcloud server th
   - Values are filled into a page only when you choose to fill them.
   - When you sign in, change a password or sign up, the extension reads the username and password you submitted, so it can offer to save or update them.
   - They are stored only if you click *Save* or *Update*, and then only encrypted, in your vault.
+- **Scanning 2FA QR codes:** when you click *Scan QR code*, the extension takes an image of the visible part of the current tab and looks for a two-factor (2FA) setup QR code in it, on your device. The image is discarded right away; it is never stored or sent. The key it finds is saved only if you click *Save*, and then only encrypted, in your vault.
 - **Passkeys:** when a website asks to create or use a passkey, the extension offers to answer from your vault. It answers only after you confirm, and you can always hand the request back to the browser instead.
 
 ## What is stored in your browser

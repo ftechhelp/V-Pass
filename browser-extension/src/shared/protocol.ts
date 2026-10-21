@@ -61,6 +61,21 @@ export interface TotpView {
 	remaining: number
 }
 
+/** An authenticator key read from a QR code on the active tab. */
+export interface TotpScan {
+	/** The QR code's text, an otpauth:// link. */
+	totp: string
+	issuer: string
+	account: string
+	/** The scanned page, when it is a website. */
+	url: string | null
+}
+
+/** Where to store an authenticator key: an existing login, or a new one. */
+export type TotpTarget =
+	| { itemId: string }
+	| { newLogin: { title: string, username: string, url: string | null } }
+
 /* ---------- autofill ---------- */
 
 /** Autocomplete tokens V-Pass fills. Content scripts classify fields into these. */
@@ -190,6 +205,10 @@ export interface UiMessages {
 	/** `force`: the user confirmed filling on a site the login isn't saved for (or over http). */
 	fill: [{ itemId: string, force?: boolean }, { filled: boolean, reason?: string }]
 	totp: [{ itemId: string }, TotpView]
+	/** Read a 2FA QR code from the visible part of the active tab. */
+	scanQr: [object, TotpScan]
+	/** `totp`: an otpauth:// link or a bare key. */
+	saveTotp: [{ totp: string, into: TotpTarget }, { itemId: string }]
 	copied: [object, void]
 	generate: [object, string]
 	/** Fill a generated password into the page's focused password field. */
