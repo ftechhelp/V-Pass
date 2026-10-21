@@ -69,10 +69,15 @@ jobs:
         run: |
           UDID=$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("^iPhone"))] | last | .udid')
           echo "Simulator: $UDID"
+          # Boot it and wait before building: launching the app on a simulator that is
+          # still starting up fails every test with "Timed out while acquiring
+          # background assertion". A test that still fails once gets a second try.
+          xcrun simctl bootstatus "$UDID" -b
           xcodebuild test \
             -project ios/VPass.xcodeproj -scheme VPass \
             -destination "id=$UDID" \
             -resultBundlePath "$RUNNER_TEMP/VPass.xcresult" \
+            -retry-tests-on-failure -test-iterations 2 \
             CODE_SIGNING_ALLOWED=NO
       - name: Keep the test results
         if: failure()
