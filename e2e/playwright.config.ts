@@ -1,4 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
+import { fakeCameraShowing } from './qr-video.ts'
+import { GOOGLE_EXPORT } from './ui/authenticator-export.ts'
 
 export default defineConfig({
 	testDir: './ui',
@@ -14,5 +16,6 @@ export default defineConfig({
 		screenshot: 'only-on-failure',
 		permissions: ['clipboard-read', 'clipboard-write'],
 	},
-	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+	// The camera shows code 1 of the 2FA import test's Google Authenticator export.
+	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], launchOptions: { args: fakeCameraShowing(GOOGLE_EXPORT[0]!) } } }],
 })

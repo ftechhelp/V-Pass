@@ -6,6 +6,7 @@ struct SettingsView: View {
 	@Environment(\.dismiss) private var dismiss
 	@State private var confirmDisconnect = false
 	@State private var showGenerator = false
+	@State private var showImport = false
 
 	var body: some View {
 		@Bindable var model = model
@@ -42,6 +43,8 @@ struct SettingsView: View {
 
 				Section("Tools") {
 					Button("Password generator") { showGenerator = true }
+					Button("Import 2FA codes") { showImport = true }
+						.accessibilityIdentifier("import-codes")
 				}
 
 				Section {
@@ -60,7 +63,7 @@ struct SettingsView: View {
 				} header: {
 					Text("Nextcloud")
 				} footer: {
-					Text("Attachments, password health, import and export, and vault settings are in the V-Pass web app.")
+					Text("Attachments, password health, importing other password managers, export, and vault settings are in the V-Pass web app.")
 				}
 
 				Section {
@@ -72,6 +75,7 @@ struct SettingsView: View {
 			.toolbar {
 				ToolbarItem(placement: .confirmationAction) {
 					Button("Done") { dismiss() }
+						.accessibilityIdentifier("settings-done")
 				}
 			}
 			.confirmationDialog("Disconnect this iPhone?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
@@ -84,6 +88,9 @@ struct SettingsView: View {
 			}
 			.sheet(isPresented: $showGenerator) {
 				GeneratorView()
+			}
+			.sheet(isPresented: $showImport) {
+				AuthenticatorImportView()
 			}
 			.task { await model.refreshAutoFillState() }
 		}

@@ -1,5 +1,14 @@
-import { InvalidTotpError, NoQrCodeError, newItem, parseTotp, readTotpQr } from '@vpass/core'
-import type { TotpScan, TotpTarget } from '../shared/protocol.ts'
+import {
+	ExportQrCodeError,
+	InvalidTotpError,
+	NoQrCodeError,
+	isGoogleAuthenticatorExport,
+	newItem,
+	newLoginForAuthenticatorEntry,
+	parseTotp,
+	readQrTextFromImage,
+} from '@vpass/core'
+import type { TotpImportCode, TotpScan, TotpTarget } from '../shared/protocol.ts'
 import { activeTab } from './autofill.ts'
 import { createItem, modifyItem } from './vault.ts'
 
@@ -22,46 +31,25 @@ export async function scanActiveTab(): Promise<TotpScan> {
 	}
 	let totp: string
 	try {
-		totp = await readQr(await (await fetch(shot)).blob(), tab.width)
+		// HiDPI screenshots are several times larger than the page and slow to
+		// search (seconds at 4K): core looks at the page's CSS size first.
+		totp = await readQrTextFromImage(await (await fetch(shot)).blob(), tab.width)
 	} catch (e) {
 		if (e instanceof NoQrCodeError) {
 			throw new NoQrCodeError('No QR code found on this page. Scroll until the whole code is visible.')
 		}
-		if (e instanceof InvalidTotpError) {
-			throw new InvalidTotpError('This QR code isn\'t a 2FA setup code')
-		}
 		throw e
 	}
-	const { issuer, account } = parseTotp(totp)
-	return { totp, issuer, account, url: tab.url && /^https?:/i.test(tab.url) ? tab.url : null }
-}
-
-/**
- * HiDPI screenshots are several times larger than the page and slow to search
- * (seconds at 4K), so look at the page's CSS size first. Small codes may need
- * the full resolution: fall back to it.
- */
-async function readQr(shot: Blob, cssWidth: number | undefined): Promise<string> {
-	const full = await createImageBitmap(shot)
-	if (cssWidth && cssWidth < full.width) {
-		try {
-			return await readTotpQr(pixels(await createImageBitmap(shot, { resizeWidth: cssWidth, resizeQuality: 'high' })))
-		} catch (e) {
-			if (!(e instanceof NoQrCodeError)) {
-				full.close()
-				throw e
-			}
-		}
+	if (isGoogleAuthenticatorExport(totp)) {
+		throw new ExportQrCodeError('This is a Google Authenticator export code. Use "Import 2FA codes" below to move all of them.')
 	}
-	return readTotpQr(pixels(full))
-}
-
-function pixels(bitmap: ImageBitmap): ImageData {
-	const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-	const ctx = canvas.getContext('2d')!
-	ctx.drawImage(bitmap, 0, 0)
-	bitmap.close()
-	return ctx.getImageData(0, 0, canvas.width, canvas.height)
+	let params
+	try {
+		params = parseTotp(totp)
+	} catch {
+		throw new InvalidTotpError('This QR code isn\'t a 2FA setup code')
+	}
+	return { totp, issuer: params.issuer, account: params.account, url: tab.url && /^https?:/i.test(tab.url) ? tab.url : null }
 }
 
 export async function saveTotp(input: string, into: TotpTarget): Promise<{ itemId: string }> {
@@ -82,4 +70,23 @@ export async function saveTotp(input: string, into: TotpTarget): Promise<{ itemI
 		urls: url ? [new URL(url).origin] : [],
 	}))
 	return { itemId: created.id }
+}
+
+/** Codes from another authenticator app, as the import page planned them with core. */
+export async function importTotpCodes(codes: TotpImportCode[]): Promise<{ saved: number }> {
+	let saved = 0
+	for (const code of codes) {
+		parseTotp(code.totp)
+		if (code.itemId) {
+			await modifyItem(code.itemId, (item) => item.type === 'login' ? { ...item, totp: code.totp } : null)
+		} else {
+			await createItem(newLoginForAuthenticatorEntry(code))
+		}
+		saved++
+	}
+	return { saved }
+}
+
+export async function openImportPage(): Promise<void> {
+	await chrome.tabs.create({ url: chrome.runtime.getURL('import/index.html') })
 }

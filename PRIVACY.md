@@ -30,6 +30,7 @@ V-Pass is a free, open-source password manager. It runs on a Nextcloud server th
   - When you sign in, change a password or sign up, the extension reads the username and password you submitted, so it can offer to save or update them.
   - They are stored only if you click *Save* or *Update*, and then only encrypted, in your vault.
 - **Scanning 2FA QR codes:** when you click *Scan QR code*, the extension takes an image of the visible part of the current tab and looks for a two-factor (2FA) setup QR code in it, on your device. The image is discarded right away; it is never stored or sent. The key it finds is saved only if you click *Save*, and then only encrypted, in your vault.
+- **Importing 2FA codes:** the *Import 2FA codes* tab can use your camera (only after you click *Scan with camera* and Chrome asks for permission) to read the export QR codes of another authenticator app, and reads screenshots or export files you choose. All of this happens on your device; camera frames and files are never stored or sent. The codes you confirm are saved only encrypted, in your vault.
 - **Passkeys:** when a website asks to create or use a passkey, the extension offers to answer from your vault. It answers only after you confirm, and you can always hand the request back to the browser instead.
 
 ## What is stored in your browser

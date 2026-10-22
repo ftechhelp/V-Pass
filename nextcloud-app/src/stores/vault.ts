@@ -1,6 +1,7 @@
 import {
 	type AttachmentMeta,
 	type AttachmentRecord,
+	type AuthenticatorPlanRow,
 	type BackupPayload,
 	type FolderRecord,
 	type ImportedEntry,
@@ -18,6 +19,7 @@ import {
 	encryptItem,
 	exportNordPassCsv,
 	itemSearchText,
+	newLoginForAuthenticatorEntry,
 	updateItem as applyItemUpdate,
 	uuid,
 	wipe,
@@ -321,6 +323,30 @@ export const useVaultStore = defineStore('vault', () => {
 		return done
 	}
 
+	/**
+	 * Store codes moved over from another authenticator app (the rows to import of
+	 * `planAuthenticatorImport`): into their logins, or as new logins.
+	 */
+	async function importAuthenticatorCodes(rows: AuthenticatorPlanRow[], onProgress?: (done: number, total: number) => void): Promise<number> {
+		let done = 0
+		for (const row of rows) {
+			if (!row.itemId) continue
+			try {
+				await patchItem(row.itemId, { totp: row.entry.totp })
+			} catch (e) {
+				// Another device changed the login first; its copy is loaded now, so set the code on that once.
+				if (!(e instanceof ConflictError)) throw e
+				await patchItem(row.itemId, { totp: row.entry.totp })
+			}
+			onProgress?.(++done, rows.length)
+		}
+		const fresh = rows.filter((row) => !row.itemId).map((row) => ({ item: newLoginForAuthenticatorEntry(row.entry), folderName: null }))
+		if (fresh.length) {
+			await importEntries(fresh, [], (created) => onProgress?.(done + created, rows.length))
+		}
+		return rows.length
+	}
+
 	async function restoreBackup(payload: BackupPayload, onProgress?: (done: number, total: number) => void): Promise<number> {
 		const folderName = new Map(payload.folders.map((f) => [f.id, f.name]))
 		return importEntries(
@@ -422,6 +448,7 @@ export const useVaultStore = defineStore('vault', () => {
 		renameFolder,
 		deleteFolder,
 		importEntries,
+		importAuthenticatorCodes,
 		restoreBackup,
 		exportBackup,
 		exportCsv,

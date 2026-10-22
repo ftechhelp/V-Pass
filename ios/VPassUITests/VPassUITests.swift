@@ -104,4 +104,40 @@ final class VPassUITests: XCTestCase {
 		XCTAssertTrue(element(app, "value-Username").waitForExistence(timeout: 30))
 		XCTAssertTrue(element(app, "totp-code").exists)
 	}
+
+	/// "Simulate scan" adds DemoVault.googleAuthenticatorExport: GitHub's code (already
+	/// in the vault), one for the Bank login and one that becomes a new login.
+	func testImportFromGoogleAuthenticator() {
+		let app = launch()
+		unlock(app)
+		element(app, "settings").tap()
+		let open = element(app, "import-codes")
+		XCTAssertTrue(open.waitForExistence(timeout: 10))
+		open.tap()
+
+		let simulate = element(app, "simulate-export-scan")
+		if !simulate.waitForExistence(timeout: 10) {
+			app.swipeUp()
+		}
+		XCTAssertTrue(simulate.waitForExistence(timeout: 5))
+		simulate.tap()
+		XCTAssertTrue(element(app, "otp-found").label.hasPrefix("3 codes found"))
+		element(app, "otp-review").tap()
+
+		let bank = element(app, "otp-row-Bank")
+		XCTAssertTrue(bank.waitForExistence(timeout: 30))
+		XCTAssertTrue(bank.label.contains("Goes into Bank (me@example.com)"), bank.label)
+		XCTAssertTrue(element(app, "otp-row-GitHub").label.contains("Already in GitHub (octocat)"))
+		XCTAssertTrue(element(app, "otp-row-Example").label.contains("New login"))
+		element(app, "otp-confirm").tap()
+		XCTAssertTrue(element(app, "otp-done").waitForExistence(timeout: 30))
+		XCTAssertEqual(element(app, "otp-done").label, "2 codes were imported")
+		element(app, "otp-close").tap()
+		element(app, "settings-done").tap()
+
+		element(app, "item-Bank").tap()
+		XCTAssertTrue(element(app, "totp-code").waitForExistence(timeout: 10))
+		app.navigationBars.buttons.firstMatch.tap()
+		XCTAssertTrue(element(app, "item-Example").waitForExistence(timeout: 10))
+	}
 }

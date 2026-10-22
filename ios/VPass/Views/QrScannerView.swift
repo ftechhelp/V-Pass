@@ -29,7 +29,7 @@ struct QrScannerView: View {
 						if let uri = firstTotp(in: payloads) {
 							finish(uri)
 						} else {
-							message = "This QR code isn't a 2FA setup code."
+							message = notASetupCode(payloads)
 						}
 					}
 					.clipShape(RoundedRectangle(cornerRadius: 12))
@@ -111,8 +111,14 @@ struct QrScannerView: View {
 		if let uri = firstTotp(in: payloads) {
 			finish(uri)
 		} else {
-			message = payloads.isEmpty ? "No QR code found in this image." : "This QR code isn't a 2FA setup code."
+			message = payloads.isEmpty ? "No QR code found in this image." : notASetupCode(payloads)
 		}
+	}
+
+	private func notASetupCode(_ payloads: [String]) -> String {
+		payloads.contains(where: isGoogleAuthenticatorExport)
+			? "This is a Google Authenticator export. Use Settings → Import 2FA codes to move all of its codes."
+			: "This QR code isn't a 2FA setup code."
 	}
 
 	private func finish(_ uri: String) {
@@ -123,8 +129,8 @@ struct QrScannerView: View {
 	}
 }
 
-/// VisionKit's live scanner, looking only for QR codes.
-private struct QrCameraView: UIViewControllerRepresentable {
+/// VisionKit's live scanner, looking only for QR codes. Also used by the import.
+struct QrCameraView: UIViewControllerRepresentable {
 	let onCodes: ([String]) -> Void
 
 	func makeUIViewController(context: Context) -> DataScannerViewController {
@@ -152,21 +158,38 @@ private struct QrCameraView: UIViewControllerRepresentable {
 		Coordinator(onCodes: onCodes)
 	}
 
+	/// Reports the QR codes in view whenever they change, including a code that
+	/// changes in place (Google Authenticator's next export page on the same screen).
 	@MainActor
 	final class Coordinator: NSObject, DataScannerViewControllerDelegate {
 		var onCodes: ([String]) -> Void
+		private var last: [String] = []
 
 		init(onCodes: @escaping ([String]) -> Void) {
 			self.onCodes = onCodes
 		}
 
 		func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
-			let payloads = allItems.compactMap { item -> String? in
+			report(allItems)
+		}
+
+		func dataScanner(_ dataScanner: DataScannerViewController, didUpdate updatedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+			report(allItems)
+		}
+
+		func dataScanner(_ dataScanner: DataScannerViewController, didRemove removedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+			report(allItems)
+		}
+
+		private func report(_ items: [RecognizedItem]) {
+			let payloads = items.compactMap { item -> String? in
 				if case let .barcode(barcode) = item {
 					return barcode.payloadStringValue
 				}
 				return nil
 			}
+			guard payloads != last else { return }
+			last = payloads
 			if !payloads.isEmpty {
 				onCodes(payloads)
 			}

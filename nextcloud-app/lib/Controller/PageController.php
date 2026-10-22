@@ -12,6 +12,7 @@ use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
+use OCP\AppFramework\Http\FeaturePolicy;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
@@ -46,6 +47,11 @@ class PageController extends Controller {
 		$csp = new ContentSecurityPolicy();
 		$csp->allowEvalWasm(true);
 		$response->setContentSecurityPolicy($csp);
+		// The camera reads Google Authenticator's export QR codes (Import & export).
+		// Nextcloud denies it to every page by default; this allows it on V-Pass's own page only.
+		$policy = new FeaturePolicy();
+		$policy->addAllowedCameraDomain("'self'");
+		$response->setFeaturePolicy($policy);
 		return $response;
 	}
 }

@@ -4,7 +4,7 @@ import { type UserConfig, defineConfig } from 'vite'
 
 /**
  * One config, four builds (see `npm run build`), all into dist/:
- * - pages:      the Vue extension pages (popup, options, prompt, iframes, offscreen) + public/
+ * - pages:      the Vue extension pages (popup, options, import, prompt, iframes, offscreen) + public/
  * - background: the module service worker as ONE file (service workers cannot
  *               use dynamic import(), so everything is inlined)
  * - content:    the isolated-world content script (MV3 content scripts must be
@@ -13,7 +13,7 @@ import { type UserConfig, defineConfig } from 'vite'
  */
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 
-const PAGES = ['popup', 'options', 'prompt', 'inline-menu', 'notification-bar', 'offscreen']
+const PAGES = ['popup', 'options', 'import', 'prompt', 'inline-menu', 'notification-bar', 'offscreen']
 
 export default defineConfig(({ mode }): UserConfig => {
 	const shared: UserConfig = {

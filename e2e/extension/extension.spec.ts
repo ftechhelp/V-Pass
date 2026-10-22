@@ -1,10 +1,11 @@
-import { type Item, type LoginItem, decryptItem, initCrypto, parseTotp, totpCode, unlockWithPassword } from '@vpass/core'
+import { type Item, type LoginItem, base32Decode, decryptItem, encryptItem, initCrypto, newItem, parseTotp, totpCode, unlockWithPassword, uuid } from '@vpass/core'
 import type { Page } from '@playwright/test'
+import QRCode from 'qrcode'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apiFor } from '../helpers.ts'
-import { BASE_URL, type Harness, LOGIN, MASTER, expect, extensionUrl, launch, openPopup, test, vpassFrame } from './fixtures.ts'
+import { BASE_URL, GOOGLE_EXPORT, type Harness, IMPORT_KEYS, LOGIN, MASTER, expect, extensionUrl, launch, openPopup, test, vpassFrame } from './fixtures.ts'
 import { TOTP_SETUP_URI } from './site.ts'
 
 /*
@@ -245,6 +246,73 @@ test('sets up a one-time code from the page\'s 2FA QR code, or from a pasted key
 	expect((await siteLogin(h, 'bob@example.com')).totp).toBe('mzxw 6ytb oi')
 
 	await popup.close()
+	await page.close()
+})
+
+test('imports 2FA codes from Google Authenticator (camera and screenshot), an export file and pasted links', async ({ harness: h }) => {
+	// A login one of the codes belongs to, saved on another device.
+	await initCrypto()
+	const api = apiFor(h.user.id, h.user.password)
+	const key = unlockWithPassword(MASTER, (await api.getVault())!)
+	await api.createItem(encryptItem(key, uuid(), newItem('login', { title: 'Fabrikam', username: 'dave', urls: ['https://fabrikam.example'] })))
+
+	// The popup's 2FA setup links to the import page.
+	const popup = await openPopup(h)
+	await popup.locator('[data-test="scan-qr"]').click()
+	const opened = h.context.waitForEvent('page')
+	await popup.locator('[data-test="open-import"]').click()
+	const page = await opened
+	await popup.close()
+	await expect(page.locator('[data-test="otp-import"]')).toBeVisible()
+	const found = page.locator('[data-test="otp-found"]')
+
+	// Code 1 of 2 from the (fake) camera.
+	await page.locator('[data-test="otp-camera"]').click()
+	await expect(found).toContainText('2 codes found')
+	await expect(found).toContainText('QR code 1 of 2 scanned')
+	await page.locator('[data-test="otp-camera-stop"]').click()
+
+	// Code 2 of 2 from a screenshot, an Aegis export, and a pasted link.
+	const aegis = {
+		version: 1,
+		header: { slots: null, params: null },
+		db: { version: 3, entries: [
+			{ type: 'totp', name: 'erin', issuer: 'Contoso', info: { secret: IMPORT_KEYS.contoso, algo: 'SHA1', digits: 6, period: 30 } },
+			{ type: 'hotp', name: 'old', issuer: 'Counter Corp', info: { secret: IMPORT_KEYS.contoso, algo: 'SHA1', digits: 6, counter: 1 } },
+		] },
+	}
+	await page.locator('[data-test="otp-files"]').setInputFiles([
+		{ name: 'screenshot.png', mimeType: 'image/png', buffer: await QRCode.toBuffer(GOOGLE_EXPORT[1]!) },
+		{ name: 'aegis.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(aegis)) },
+	])
+	await expect(found).toContainText('4 codes found')
+	await expect(found).toContainText('QR code 2 of 2 scanned')
+	await page.locator('[data-test="otp-paste"]').fill(`otpauth://totp/Woodgrove:frank?secret=${IMPORT_KEYS.woodgrove}&issuer=Woodgrove`)
+	await page.locator('[data-test="otp-paste-add"]').click()
+	await expect(found).toContainText('5 codes found')
+
+	await page.locator('[data-test="otp-review"]').click()
+	const list = page.locator('[data-test="otp-review-list"]')
+	await expect(list.locator('[data-test="otp-row-Test site"]')).toContainText('Already in Test site')
+	await expect(list.locator('[data-test="otp-row-Fabrikam"]')).toContainText('Goes into Fabrikam (dave)')
+	await expect(list.locator('[data-test="otp-row-Northwind"]')).toContainText('New login')
+	await expect(list.locator('[data-test="otp-row-Contoso"]')).toContainText('New login')
+	await expect(list).toContainText('Counter Corp · old: Counter-based (HOTP) codes aren\'t supported')
+	await list.locator('[data-test="otp-row-Woodgrove"] input').uncheck()
+	await page.locator('[data-test="otp-confirm"]').click()
+	await expect(page.locator('[data-test="otp-done"]')).toContainText('3 codes imported')
+
+	const logins = (await vault(h)).filter((i): i is LoginItem => i.type === 'login')
+	const keyOf = (title: string) => {
+		const login = logins.find((l) => l.title === title)
+		return login?.totp ? parseTotp(login.totp).secret : null
+	}
+	expect(keyOf('Fabrikam')).toEqual(base32Decode(IMPORT_KEYS.fabrikam))
+	expect(keyOf('Northwind')).toEqual(base32Decode(IMPORT_KEYS.northwind))
+	expect(logins.find((l) => l.title === 'Northwind')?.username).toBe('carol@northwind.example')
+	expect(keyOf('Contoso')).toEqual(base32Decode(IMPORT_KEYS.contoso))
+	expect(logins.some((l) => l.title === 'Woodgrove')).toBe(false)
+	expect(logins.filter((l) => l.title === 'Test site')).toHaveLength(1)
 	await page.close()
 })
 

@@ -23,17 +23,23 @@ import {
 	itemDisplayTitle,
 	itemSearchText,
 	itemSubtitle,
+	base32Decode,
+	buildOtpauthUri,
 	luhnValid,
 	maskCardNumber,
 	matchUrl,
+	newItem,
 	newKdfParams,
+	parseAuthenticatorExport,
 	parseTotp,
+	planAuthenticatorImport,
 	registrableDomain,
 	seal,
 	totpCode,
 	uuid,
 } from '../src/index.ts'
 import { EFF_LARGE_WORDLIST } from '../src/tools/eff-wordlist.ts'
+import { migrationLink } from '../test/helpers/google-authenticator.ts'
 
 /**
  * Writes the fixtures that prove the Swift port (ios/VPassKit) is byte-compatible
@@ -191,6 +197,7 @@ test('write iOS vectors', async () => {
 	}))
 
 	const vectors = {
+		authenticator: authenticatorVectors(),
 		generatedBy: 'packages/core/scripts/ios-vectors.ts',
 		encoding: [new Uint8Array([]), new Uint8Array([0xff]), new Uint8Array([0xfb, 0xff, 0xbf]), utf8('any carnal pleas')].map((b) => ({
 			hex: hex(b), b64url: b64urlEncode(b), base32: base32Encode(b),
@@ -237,3 +244,132 @@ test('write iOS vectors', async () => {
 	writeFileSync(resolve(kit, 'Tests/VPassKitTests/Fixtures/vectors.json'), `${JSON.stringify(vectors, null, 2)}\n`)
 	writeFileSync(resolve(kit, 'Sources/VPassKit/Resources/eff-wordlist.txt'), `${EFF_LARGE_WORDLIST.join('\n')}\n`)
 })
+
+/** Other authenticator apps' exports, the otpauth:// links V-Pass writes for them, and where each code goes. */
+function authenticatorVectors() {
+	const KEY = 'JBSWY3DPEHPK3PXP'
+	const KEY2 = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+	const KEY3 = 'MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U'
+	const google = migrationLink([
+		{ secret: base32Decode(KEY2), name: 'octocat', issuer: 'GitHub', algorithm: 2, digits: 2 },
+		{ secret: base32Decode(KEY3), name: 'Svc:a+b@example.com' },
+		{ secret: base32Decode(KEY), name: 'Société Générale:jean dupont', issuer: 'Société Générale' },
+		{ secret: base32Decode(KEY), name: "O'Brien (old)", issuer: 'Bank & Co. ~ *!', algorithm: 3 },
+		{ secret: base32Decode(KEY), name: 'counter', issuer: 'Old bank', type: 1, counter: 7 },
+		{ secret: base32Decode(KEY), name: 'md5', issuer: 'Weird', algorithm: 4 },
+		{ secret: Uint8Array.from([1, 2]), name: 'short', issuer: 'Tiny' },
+		{ secret: base32Decode(KEY), name: 'other', issuer: 'Odd', type: 5 },
+	], { size: 4, index: 2, id: -123456 })
+	const inputs = [
+		'otpauth-migration://offline?data=CjEKCkhlbGxvId6tvu8SGEV4YW1wbGU6YWxpY2VAZ29vZ2xlLmNvbRoHRXhhbXBsZTAC',
+		google,
+		// Unencoded base64, as some QR readers pass it on: "+" must survive.
+		decodeURIComponent(migrationLink([{ secret: Uint8Array.from([0xfb, 0xff, 0xbf, 0xfb, 0xff, 0xbf, 0xfb, 0xff]), name: 'plus', issuer: 'P' }])),
+		[
+			`otpauth://totp/GitHub:octocat?secret=${KEY}&issuer=GitHub&codeDisplay=%7B%22pinned%22%3Afalse%7D`,
+			`  "otpauth://totp/Example:alice@example.com?secret=${KEY2}&algorithm=SHA512&digits=8&period=60",`,
+			`otpauth://hotp/Old:counter?secret=${KEY3}&counter=1`,
+			'otpauth://totp/Broken?secret=!!!',
+			`otpauth://totp/%E2%9C%93%20Check:me?secret=${KEY}&issuer=%E2%9C%93+Check`,
+		].join('\r\n'),
+		JSON.stringify({
+			version: 1,
+			header: { slots: null, params: null },
+			db: {
+				version: 3,
+				entries: [
+					{ type: 'totp', name: 'alice@example.com', issuer: 'Example', info: { secret: KEY, algo: 'SHA256', digits: 7, period: 45 } },
+					{ type: 'TOTP', name: ' padded ', issuer: ' Spaces ', info: { secret: KEY2.toLowerCase(), algo: 'sha1', digits: 6, period: 30 } },
+					{ type: 'hotp', name: 'counter', issuer: 'Old', info: { secret: KEY, algo: 'SHA1', digits: 6, counter: 3 } },
+					{ type: 'steam', name: 'gamer', issuer: 'Steam', info: { secret: KEY, algo: 'SHA1', digits: 5, period: 30 } },
+					{ type: 'yandex', name: 'y', issuer: 'Yandex', info: { secret: KEY } },
+					{ type: 'totp', name: 'bad', issuer: 'Odd', info: { secret: KEY, algo: 'SHA1', digits: 9, period: 30 } },
+					{ type: 'totp', name: 'md5', issuer: 'Odd', info: { secret: KEY, algo: 'MD5' } },
+					{ name: 'no type', issuer: 'Default', info: { secret: KEY3, period: 30.5 } },
+				],
+			},
+		}),
+		JSON.stringify({
+			services: [
+				{ name: 'GitHub', secret: KEY, otp: { account: 'octocat', issuer: 'GitHub', digits: 6, period: 30, algorithm: 'SHA1', tokenType: 'TOTP' } },
+				{ name: 'Fallback name', secret: KEY2, otp: { label: 'me@example.com', digits: '8', period: '60' } },
+				{ name: 'Words', secret: KEY2, otp: { digits: 'six' } },
+				{ name: 'Counter', secret: KEY3, otp: { tokenType: 'HOTP', counter: 4 } },
+				{ name: 'Steam', secret: KEY3, otp: { tokenType: 'STEAM' } },
+			],
+			groups: [],
+			schemaVersion: 4,
+		}),
+		`\uFEFF${JSON.stringify({
+			encrypted: false,
+			items: [
+				{ name: 'GitHub', type: 1, login: { username: 'octocat', totp: `otpauth://totp/GitHub:octocat?secret=${KEY}&issuer=GitHub` } },
+				{ name: 'Bank', type: 1, login: { username: 'me@example.com', totp: KEY2.toLowerCase() } },
+				{ name: 'Label only', type: 1, login: { username: 'fallback', totp: `otpauth://totp/?secret=${KEY3}` } },
+				{ name: 'Steam', type: 1, login: { username: 'gamer', totp: 'steam://ABCDEFGH' } },
+				{ name: 'Counter', type: 1, login: { username: 'c', totp: `otpauth://hotp/C?secret=${KEY}&counter=2` } },
+				{ name: 'Junk', type: 1, login: { username: 'j', totp: 'not a key!' } },
+				{ name: 'No code', type: 1, login: { username: 'x', password: 'y' } },
+				{ name: 'A note', type: 2 },
+			],
+		})}`,
+	]
+	const errors = [
+		'otpauth-migration://offline?data=CjEKCkhlbGxv',
+		'otpauth-migration://offline?data=%%%',
+		'otpauth-migration://offline?data=CjE',
+		'https://example.com/',
+		'',
+		'{"hello":"world"}',
+		'{oops',
+		'[1, 2]',
+		JSON.stringify({ version: 1, header: { slots: [] }, db: 'ciphertext' }),
+		JSON.stringify({ services: [], servicesEncrypted: 'abc:def' }),
+		JSON.stringify({ encrypted: true, items: [] }),
+	].map((text) => {
+		try {
+			parseAuthenticatorExport(text)
+			throw new Error(`expected an error for ${text}`)
+		} catch (e) {
+			return { text, message: (e as Error).message }
+		}
+	})
+	const uris = [
+		{ secret: base32Decode(KEY), algorithm: 'SHA1', digits: 6, period: 30, issuer: '', account: '' },
+		{ secret: base32Decode(KEY), algorithm: 'SHA256', digits: 8, period: 60, issuer: 'Ünï cødé & Co', account: 'a+b@x.example' },
+		{ secret: base32Decode(KEY2), algorithm: 'SHA512', digits: 7, period: 30, issuer: "!'()*-._~", account: '/?#[]@ %' },
+		{ secret: base32Decode(KEY3), algorithm: 'SHA1', digits: 6, period: 30, issuer: '', account: 'only account' },
+	].map((params) => ({ params: { ...params, secret: base32Encode(params.secret) }, uri: buildOtpauthUri(params as Parameters<typeof buildOtpauthUri>[0]) }))
+
+	const stampItem = <T extends object>(item: T) => ({ ...item, createdAt: stamp, updatedAt: stamp })
+	const items = [
+		{ id: 'github', item: stampItem(newItem('login', { title: 'GitHub', username: 'octocat', urls: ['https://github.com'], totp: `otpauth://totp/GitHub:octocat?secret=${KEY.toLowerCase()}` })) },
+		{ id: 'google-personal', item: stampItem(newItem('login', { title: 'Gmail', username: 'me@gmail.com', urls: ['https://accounts.google.com'] })) },
+		{ id: 'google-work', item: stampItem(newItem('login', { title: 'Work Google', username: 'Me@Work.example', urls: ['https://mail.google.com'] })) },
+		{ id: 'bank', item: stampItem(newItem('login', { title: 'My Bank', username: 'customer-1', urls: ['https://online.mybank.co.uk/login'], totp: KEY3 })) },
+		{ id: 'acme', item: stampItem(newItem('login', { title: 'ACME Corp', username: '' })) },
+		{ id: 'solo', item: stampItem(newItem('login', { title: 'Solo', username: 'me@solo.example' })) },
+		{ id: 'broken', item: stampItem(newItem('login', { title: 'Broken', username: 'b', totp: 'not a key' })) },
+		{ id: 'note', item: stampItem(newItem('note', { title: 'GitHub' })) },
+		{ id: 'bare', item: stampItem(newItem('login', { title: '', urls: ['gitlab.com'] })) },
+	]
+	const entry = (issuer: string, account: string, key: string) => ({ totp: `otpauth://totp/x?secret=${key}`, issuer, account })
+	const entries = [
+		entry('GitHub', 'octocat@example.com', KEY),
+		entry('Google', 'me@work.example', KEY2),
+		entry('Google', 'someone@else.example', 'MZXW6YTBOI'),
+		entry('mybank', 'customer-1', 'MZXW6YTBOJAA'),
+		entry('Acme-Corp', 'admin', 'MZXW6YTBOJBB'),
+		entry('', 'nobody', 'MZXW6YTBOJCC'),
+		entry('Solo', 'other@solo.example', 'MZXW6YTBOJDD'),
+		entry('Broken', 'b', 'MZXW6YTBOJEE'),
+		entry('GitLab', 'dev', 'MZXW6YTBOJFF'),
+		entry('GitHub', 'second', KEY.toLowerCase()),
+	]
+	return {
+		exports: inputs.map((text) => ({ text, result: parseAuthenticatorExport(text) })),
+		errors,
+		uris,
+		plan: { items, entries, rows: planAuthenticatorImport(entries, items).map((r) => ({ action: r.action, itemId: r.itemId, selected: r.selected })) },
+	}
+}

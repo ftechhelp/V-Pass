@@ -2,6 +2,7 @@ import { type Page, expect, test } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import QRCode from 'qrcode'
 import { type TestUser, createTestUser, deleteTestUser } from '../helpers.ts'
+import { GOOGLE_EXPORT, IMPORT_KEYS } from './authenticator-export.ts'
 
 const MASTER = 'orbit velvet cactus lantern 91'
 const FIXTURE = fileURLToPath(new URL('../../packages/core/test/fixtures/nordpass-export.csv', import.meta.url))
@@ -104,6 +105,45 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 		await expect(page.getByText('Visa Gold')).toBeVisible()
 		await page.getByText('Visa Gold').click()
 		await expect(page.getByText('•••• 1111')).toBeVisible()
+	})
+
+	await test.step('import 2FA codes from Google Authenticator (camera and screenshot), a 2FAS file and a pasted link', async () => {
+		await page.locator('[data-test="nav-import"]').click()
+		const found = page.locator('[data-test="otp-found"]')
+		// Code 1 of 2 from the (fake) camera: this checks that V-Pass's page may use the camera.
+		await page.locator('[data-test="otp-camera"]').click()
+		await expect(found).toContainText('2 codes found')
+		await expect(found).toContainText('QR code 1 of 2 scanned')
+		await page.locator('[data-test="otp-camera-stop"]').click()
+
+		const twofas = { services: [{ name: 'Northwind', secret: IMPORT_KEYS.northwind, otp: { account: 'carol@northwind.example', issuer: 'Northwind', tokenType: 'TOTP' } }], schemaVersion: 4 }
+		await page.locator('[data-test="otp-files"]').setInputFiles([
+			{ name: 'screenshot.png', mimeType: 'image/png', buffer: await QRCode.toBuffer(GOOGLE_EXPORT[1]!) },
+			{ name: 'backup.2fas', mimeType: 'application/octet-stream', buffer: Buffer.from(JSON.stringify(twofas)) },
+		])
+		await expect(found).toContainText('4 codes found')
+		await expect(found).toContainText('QR code 2 of 2 scanned')
+		await page.locator('[data-test="otp-paste"] textarea, textarea[data-test="otp-paste"]').first().fill(`otpauth://totp/Woodgrove:frank?secret=${IMPORT_KEYS.woodgrove}&issuer=Woodgrove`)
+		await page.locator('[data-test="otp-paste-add"]').click()
+		await expect(found).toContainText('5 codes found')
+
+		await page.locator('[data-test="otp-review"]').click()
+		const list = page.locator('[data-test="otp-review-list"]')
+		await expect(list.locator('[data-test="otp-row-GitHub"]')).toContainText('Already in GitHub (alice@example.com)')
+		await expect(list.locator('[data-test="otp-row-Bank"]')).toContainText('Goes into Bank (carol)')
+		await expect(list.locator('[data-test="otp-row-example.org"]')).toContainText('Goes into example.org (bob)')
+		await expect(list.locator('[data-test="otp-row-Northwind"]')).toContainText('New login')
+		await list.locator('[data-test="otp-row-Woodgrove"]').getByText('Woodgrove').click()
+		await expect(page.locator('[data-test="otp-confirm"]')).toContainText('Import 3 codes')
+		await page.locator('[data-test="otp-confirm"]').click()
+		await expect(page.locator('[data-test="otp-done"]')).toContainText('3 codes were imported')
+
+		await page.locator('[data-test="nav-all"]').click()
+		for (const title of ['Bank', 'Northwind']) {
+			await page.getByText(title, { exact: true }).first().click()
+			await expect(page.locator('[data-test="totp-code"]')).toHaveText(/^\d{3} \d{3}$/)
+		}
+		await expect(page.getByText('Woodgrove')).toHaveCount(0)
 	})
 })
 

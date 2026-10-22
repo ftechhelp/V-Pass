@@ -312,6 +312,33 @@ final class AppModel {
 		}
 	}
 
+	/// Store codes moved over from another authenticator app (the rows to import of
+	/// `planAuthenticatorImport`): into their logins, or as new logins. `onSaved`
+	/// counts each one, so a failure part-way can say how many were kept.
+	func importAuthenticatorCodes(_ rows: [AuthenticatorPlanRow], onSaved: () -> Void) async throws {
+		guard let session else { throw LockedError() }
+		do {
+			for row in rows {
+				if let id = row.itemId {
+					let totp = row.entry.totp
+					_ = try await session.modifyItem(id: id) { item in
+						guard item.type == .login else { return nil }
+						var edited = item
+						edited.totp = totp
+						return edited
+					}
+				} else {
+					_ = try await session.createItem(newLoginForAuthenticatorEntry(row.entry))
+				}
+				onSaved()
+			}
+		} catch {
+			await refreshSnapshot()
+			throw error
+		}
+		await refreshSnapshot()
+	}
+
 	private func perform(_ body: (VaultSession) async throws -> Void) async {
 		guard let session else { return }
 		do {

@@ -1,6 +1,7 @@
 import QRCode from 'qrcode'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
+	ExportQrCodeError,
 	InvalidTotpError,
 	NoQrCodeError,
 	analyzePasswords,
@@ -15,6 +16,7 @@ import {
 	parseRange,
 	parseTotp,
 	pwnedCount,
+	readQrText,
 	readTotpQr,
 	sha1Hex,
 	totpCode,
@@ -131,6 +133,12 @@ describe('reading authenticator QR codes', () => {
 	it('rejects QR codes that are not authenticator keys', async () => {
 		await expect(readTotpQr(qrImage('https://example.com/'))).rejects.toThrow(InvalidTotpError)
 		await expect(readTotpQr(qrImage('otpauth://hotp/x?secret=GEZDGNBV&counter=1'))).rejects.toThrow(InvalidTotpError)
+	})
+
+	it('tells a Google Authenticator export apart, and reads it as plain text', async () => {
+		const link = 'otpauth-migration://offline?data=CjEKCkhlbGxvId6tvu8SGEV4YW1wbGU6YWxpY2VAZ29vZ2xlLmNvbRoHRXhhbXBsZTAC'
+		await expect(readTotpQr(qrImage(link))).rejects.toThrow(ExportQrCodeError)
+		expect(await readQrText(qrImage(link))).toBe(link)
 	})
 
 	it('reports an image without a QR code', async () => {

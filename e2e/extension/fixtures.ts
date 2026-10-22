@@ -1,15 +1,33 @@
 import { type BrowserContext, type Frame, type Page, test as base, chromium, expect } from '@playwright/test'
-import { createVaultKeys, encryptItem, initCrypto, newItem, uuid } from '@vpass/core'
+import { base32Decode, createVaultKeys, encryptItem, initCrypto, newItem, uuid } from '@vpass/core'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { migrationLink } from '../../packages/core/test/helpers/google-authenticator.ts'
 import { BASE_URL, type TestUser, apiFor, createTestUser, deleteTestUser } from '../helpers.ts'
+import { fakeCameraShowing } from '../qr-video.ts'
 import { type TestSite, startTestSite } from './site.ts'
 
 export const MASTER = 'quartz falcon meadow ember 47'
 export const LOGIN = { username: 'alice@example.com', password: 'Sup3r-secret-login!', totpSecret: 'JBSWY3DPEHPK3PXP' }
 export const EXTENSION_DIR = fileURLToPath(new URL('../../browser-extension/dist', import.meta.url))
+
+/** Keys of the codes the import test moves over from other apps. */
+export const IMPORT_KEYS = { northwind: 'KRSXG5CTMVRXEZLU', fabrikam: 'ONSWG4TFOQYTEMZU', contoso: 'MZXW6YTBOJRGC6TB', woodgrove: 'NFXGQ2LOM5RW65LU' }
+
+/**
+ * A two-code Google Authenticator export. The browser's fake camera shows code 1:
+ * the test site's key (already in the vault by then) and Northwind's. Code 2 is a screenshot.
+ */
+export const GOOGLE_EXPORT = [
+	migrationLink([
+		{ secret: base32Decode('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'), name: 'Test site:alice@example.com', issuer: 'Test site' },
+		{ secret: base32Decode(IMPORT_KEYS.northwind), name: 'carol@northwind.example', issuer: 'Northwind' },
+	], { size: 2, index: 0, id: 4711 }),
+	migrationLink([{ secret: base32Decode(IMPORT_KEYS.fabrikam), name: 'dave', issuer: 'Fabrikam' }], { size: 2, index: 1, id: 4711 }),
+]
+const CAMERA = fakeCameraShowing(GOOGLE_EXPORT[0]!)
 
 export interface Harness {
 	context: BrowserContext
@@ -23,7 +41,7 @@ export interface Harness {
 export async function launch(userDataDir: string): Promise<{ context: BrowserContext, extensionId: string }> {
 	const context = await chromium.launchPersistentContext(userDataDir, {
 		channel: 'chromium',
-		args: [`--disable-extensions-except=${EXTENSION_DIR}`, `--load-extension=${EXTENSION_DIR}`],
+		args: [`--disable-extensions-except=${EXTENSION_DIR}`, `--load-extension=${EXTENSION_DIR}`, ...CAMERA],
 	})
 	let [worker] = context.serviceWorkers()
 	worker ??= await context.waitForEvent('serviceworker')

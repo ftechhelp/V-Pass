@@ -122,6 +122,11 @@
 			</div>
 
 			<h2 class="page__title page__title--spaced">
+				{{ t('vpass', '2FA codes from another app') }}
+			</h2>
+			<AuthenticatorImport />
+
+			<h2 class="page__title page__title--spaced">
 				{{ t('vpass', 'Export') }}
 			</h2>
 			<p class="page__intro">
@@ -186,6 +191,7 @@ import FolderIcon from 'vue-material-design-icons/FolderOutline.vue'
 import ImportIcon from 'vue-material-design-icons/Import.vue'
 import ShieldLockIcon from 'vue-material-design-icons/ShieldLock.vue'
 import UploadIcon from 'vue-material-design-icons/Upload.vue'
+import AuthenticatorImport from '../components/AuthenticatorImport.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import { confirmAction, nextFrame, saveFile } from '../services/browser.ts'
 import { useSessionStore } from '../stores/session.ts'

@@ -7,6 +7,9 @@ public enum DemoVault {
 	public static let account = Account(server: "https://demo.invalid", loginName: "demo", appPassword: "demo")
 	/// What the QR scanner's "Simulate scan" returns in UI-test mode (the simulator has no camera).
 	public static let setupQRCode = "otpauth://totp/Example:alice@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Example"
+	/// What the import's "Simulate scan" returns: a Google Authenticator export (built with core's
+	/// test helper) of GitHub's key (already in this vault), one for the Bank login, and a new one.
+	public static let googleAuthenticatorExport = "otpauth-migration://offline?data=CioKCkhlbGxvId6tvu8SDkdpdEh1YjpvY3RvY2F0GgZHaXRIdWIgASgBMAIKKAoKVGVzdFNlY3JldBIObWVAZXhhbXBsZS5jb20aBEJhbmsgASgBMAIKOAoUMTIzNDU2Nzg5MDEyMzQ1Njc4OTASEWFsaWNlQGV4YW1wbGUuY29tGgdFeGFtcGxlIAEoATACEAEYASAAKOoP"
 
 	public static func makeServer() async throws -> InMemoryServer {
 		let kdf = try newKdfParams(opsLimit: 2, memLimit: 32 * 1024 * 1024)

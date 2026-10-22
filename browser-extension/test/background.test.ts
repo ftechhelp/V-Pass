@@ -48,6 +48,7 @@ describe('message senders', () => {
 	const ext = 'chrome-extension://vpass-test'
 	it('tells extension pages, in-page iframes and content scripts apart', () => {
 		expect(senderKind({ id: 'vpass-test', url: `${ext}/popup/index.html` })).toBe('page')
+		expect(senderKind({ id: 'vpass-test', url: `${ext}/import/index.html` })).toBe('page')
 		expect(senderKind({ id: 'vpass-test', url: `${ext}/prompt/index.html#x`, tab: { id: 1 } as chrome.tabs.Tab })).toBe('page')
 		expect(senderKind({ id: 'vpass-test', url: `${ext}/inline-menu/index.html#t`, tab: { id: 1 } as chrome.tabs.Tab, frameId: 3 })).toBe('frame-ui')
 		expect(senderKind({ id: 'vpass-test', url: 'https://example.com/login', tab: { id: 1 } as chrome.tabs.Tab, frameId: 0 })).toBe('content')

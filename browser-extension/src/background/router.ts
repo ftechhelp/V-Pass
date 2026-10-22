@@ -28,7 +28,7 @@ import { barRespond, barView, pendingBar, submitted } from './save.ts'
 import { isUnlocked, lock, setKeepUnlocked, unlock } from './session.ts'
 import { getSettings, neverSaveList, removeNeverSave, setSettings } from './settings.ts'
 import { local } from './storage.ts'
-import { saveTotp, scanActiveTab } from './totp-setup.ts'
+import { importTotpCodes, openImportPage, saveTotp, scanActiveTab } from './totp-setup.ts'
 import { clearVault, itemViews, sync } from './vault.ts'
 import { webAppConnect, webAppStatus } from './webapp.ts'
 
@@ -124,6 +124,8 @@ const pageHandlers: Handlers<UiMessages> = {
 	totp: ({ itemId }) => totpFor(itemId),
 	scanQr: () => scanActiveTab(),
 	saveTotp: ({ totp, into }) => saveTotp(totp, into),
+	importTotp: ({ codes }) => importTotpCodes(codes),
+	openImport: () => openImportPage(),
 	copied: () => scheduleClear(),
 	generate: () => generateFromSettings(),
 	fillGenerated: ({ password }) => fillGeneratedIntoFocused(password),
@@ -186,7 +188,7 @@ export function senderKind(sender: Sender): SenderKind | null {
 		if (path.startsWith('/inline-menu/') || path.startsWith('/notification-bar/')) {
 			return 'frame-ui'
 		}
-		if (path.startsWith('/popup/') || path.startsWith('/options/') || path.startsWith('/prompt/')) {
+		if (path.startsWith('/popup/') || path.startsWith('/options/') || path.startsWith('/prompt/') || path.startsWith('/import/')) {
 			return 'page'
 		}
 		return null

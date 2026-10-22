@@ -10,9 +10,9 @@ A zero-knowledge password manager that runs as an app inside your own Nextcloud.
   - a breach check against Have I Been Pwned, using k-anonymity
   - built-in 2FA (TOTP) codes, set up by scanning the site's QR code
   - encrypted file attachments
-- **Import and export:** import from NordPass. Export to an encrypted `.vpass` backup or to CSV.
-- **Chrome extension:** fills logins, one-time codes, cards and addresses; offers to save new logins and changed passwords; generates passwords; sets up 2FA codes from the QR code a site shows; and stores and uses website passkeys from the vault.
-- **iPhone app:** browse, search, copy and edit the vault, scan 2FA QR codes, unlock with Face ID, and fill passwords, 2FA codes and passkeys in Safari and other apps through iOS AutoFill.
+- **Import and export:** import from NordPass, and move 2FA codes over from Google Authenticator, Aegis, 2FAS, Ente Auth, Bitwarden Authenticator or anything that shows `otpauth://` links (in the web app, the extension and the iPhone app). Export to an encrypted `.vpass` backup or to CSV.
+- **Chrome extension:** fills logins, one-time codes, cards and addresses; offers to save new logins and changed passwords; generates passwords; sets up 2FA codes from the QR code a site shows, or imports them from another authenticator app; and stores and uses website passkeys from the vault.
+- **iPhone app:** browse, search, copy and edit the vault, scan 2FA QR codes, import 2FA codes from another authenticator app, unlock with Face ID, and fill passwords, 2FA codes and passkeys in Safari and other apps through iOS AutoFill.
 
 ## Security model
 
@@ -110,6 +110,8 @@ You can also connect from the toolbar icon by typing your Nextcloud address.
 
 **Scanning 2FA QR codes:** the popup's *Scan QR code* captures the visible part of the current tab only when you click it. The image is decoded inside the extension and discarded; only the key it finds is saved, encrypted, and only when you click *Save*.
 
+**Importing 2FA codes:** *Import 2FA codes* (on the popup's QR screen and in the options) opens a tab that reads Google Authenticator's export QR codes with the camera or from screenshots, or takes an export file or pasted `otpauth://` links. Camera frames and files are read inside that tab and never stored or sent; the codes you confirm are saved, encrypted, into your logins.
+
 ## iPhone app
 
 The app uses the vault you created in the V-Pass web app, like the Chrome extension: it connects with its own app password (Login Flow v2) and decrypts everything on the phone.
@@ -117,7 +119,7 @@ The app uses the vault you created in the V-Pass web app, like the Chrome extens
 **Install:** it is distributed through **TestFlight** under the owner's Apple developer account. Builds come from GitHub Actions (macOS runners), so no Mac is involved; the one-time Apple setup is in [`ios/SETUP.md`](ios/SETUP.md). TestFlight builds expire after 90 days, and every push that changes the app uploads a fresh one.
 
 **What it does:**
-- **The app:** connect to your Nextcloud, unlock with the master password (or the recovery key), browse folders and categories, search, copy fields, see live 2FA codes, and add or edit logins, notes, cards and personal info with the password generator. *Scan QR code* in the login editor reads a site's 2FA QR code with the camera, or from a screenshot when the code is on the iPhone's own screen. Attachments, password health, import and export stay in the web app.
+- **The app:** connect to your Nextcloud, unlock with the master password (or the recovery key), browse folders and categories, search, copy fields, see live 2FA codes, and add or edit logins, notes, cards and personal info with the password generator. *Scan QR code* in the login editor reads a site's 2FA QR code with the camera, or from a screenshot when the code is on the iPhone's own screen. *Settings → Import 2FA codes* moves codes over from another authenticator app (see [Moving 2FA codes from another app](#moving-2fa-codes-from-another-app)). Attachments, password health, importing other password managers and export stay in the web app.
 - **AutoFill** (turn it on in *Settings → General → AutoFill & Passwords → V-Pass*): logins in the keyboard bar and the Passwords sheet, 2FA codes in code fields, and passkeys: signing in with passkeys from the vault (including ones the Chrome extension saved) and saving new ones. A new passkey is saved to Nextcloud before the site gets it.
 
 **Locking:**
@@ -174,9 +176,9 @@ This pin affects only the dev stack, not the owner's production app package or i
 | `make typecheck` | `tsc` on core and `vue-tsc` on the UI |
 | `make lint-php` / `make test-php` | PHP syntax check and PHPUnit service tests, run in Docker |
 | `make test-api` | Black-box OCS API tests against the dev instance: concurrency 409s, tombstones, attachments, user isolation |
-| `make e2e` | Playwright: onboarding, add item, lock and unlock, NordPass import, passkey unlock (virtual authenticator with PRF) |
+| `make e2e` | Playwright: onboarding, add item, lock and unlock, NordPass import, importing 2FA codes (fake camera, screenshot, a 2FAS file, a paste), passkey unlock (virtual authenticator with PRF) |
 | `make test-extension` | Extension unit tests (happy-dom): field detection, filling, submitted credentials, save-prompt decisions, message sender checks |
-| `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP and setting it up from a page's QR code, cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback, "keep unlocked" across restarts, and the web app's "Browser extension" page connecting a fresh browser. |
+| `make e2e-extension` | Builds the extension, then runs it in Chromium against the dev instance and a local test site. Covers Login Flow v2, unlock, inline and popup fill, the clickjacking guard, update and save prompts, the generator, TOTP and setting it up from a page's QR code, the 2FA import page (fake camera, screenshot, export file, paste), cards, addresses, passkeys (verified with `@simplewebauthn/server`), passkey autofill, the "another device" fallback, "keep unlocked" across restarts, and the web app's "Browser extension" page connecting a fresh browser. |
 | `make zk-check` | Stores a sentinel string through the API, then greps the Postgres dump and Nextcloud's data folder. Any match fails the check. |
 | `make test-ios-kit` | VPassKit, the iPhone app's Swift core, in Docker: unit tests plus vectors produced by `@vpass/core` (`npm run vectors:ios`) that prove both sides read and write the same bytes |
 | `make test-ios-interop` | The Swift client against the dev instance: core seeds a vault, Swift reads and edits it (including a 409), saves a passkey, and core verifies everything it wrote with `@simplewebauthn/server` |
@@ -211,6 +213,19 @@ The test fixture (`packages/core/test/fixtures/nordpass-export.csv`) is syntheti
 3. Replace the fixture with that file and run `make test`.
 
 NordPass's documentation does not say whether the export includes passkeys or 2FA secrets. If a `totp` column exists, it is imported.
+
+## Moving 2FA codes from another app
+
+Each V-Pass client can import one-time codes: *Import & export → 2FA codes from another app* in the web app, *Import 2FA codes* in the extension (popup QR screen or options), and *Settings → Import 2FA codes* on the iPhone. Everything is read on your device; only the encrypted logins are uploaded.
+
+| From | How |
+|---|---|
+| Google Authenticator | Menu → *Transfer accounts* → *Export accounts*, select the accounts. It shows one QR code for about every 10 accounts: scan each with the camera, or choose screenshots of them (Android doesn't allow screenshots of these codes, so use a camera there). |
+| Aegis, 2FAS, Bitwarden Authenticator | Export an **unencrypted** JSON file (without a password) and choose it. Encrypted exports are refused with a message. |
+| Ente Auth, others | Export or copy the `otpauth://` links and choose the file or paste them. |
+| Microsoft Authenticator | It can't export its codes. Set up two-factor authentication again on each site and scan the new QR code in V-Pass. |
+
+Before saving, a review list shows where each code goes: into the login for the same service and username, into the only login for that service if it has no code yet, or into a new login. Codes already in V-Pass are left alone, and a code that would replace a different one is only imported if you tick it. Counter-based (HOTP), Steam and MD5 codes are listed as not supported. Delete the screenshots and export files afterwards: they aren't encrypted.
 
 ## API (for the extension and desktop client)
 

@@ -195,6 +195,60 @@ final class VectorTests: XCTestCase {
 		}
 	}
 
+	func testAuthenticatorExports() throws {
+		let vectors = v["authenticator"]!
+		for vector in vectors["exports"]!.arrayValue! {
+			let text = vector["text"]!.stringValue!
+			let expected = vector["result"]!
+			let result = try parseAuthenticatorExport(text)
+			XCTAssertEqual(result.format.rawValue, expected["format"]?.stringValue, text)
+			XCTAssertEqual(result.entries, expected["entries"]!.arrayValue!.map {
+				AuthenticatorEntry(totp: $0["totp"]!.stringValue!, issuer: $0["issuer"]!.stringValue!, account: $0["account"]!.stringValue!)
+			}, text)
+			XCTAssertEqual(result.skipped, expected["skipped"]!.arrayValue!.map {
+				SkippedAuthenticatorEntry(issuer: $0["issuer"]!.stringValue!, account: $0["account"]!.stringValue!, reason: $0["reason"]!.stringValue!)
+			}, text)
+			XCTAssertEqual(result.batches, expected["batches"]!.arrayValue!.map {
+				AuthenticatorBatch(id: $0["id"]!.intValue!, index: $0["index"]!.intValue!, size: $0["size"]!.intValue!)
+			}, text)
+		}
+		for vector in vectors["errors"]!.arrayValue! {
+			let text = vector["text"]!.stringValue!
+			XCTAssertThrowsError(try parseAuthenticatorExport(text), text) { error in
+				XCTAssertEqual((error as? InvalidAuthenticatorExportError)?.message, vector["message"]?.stringValue, text)
+			}
+		}
+	}
+
+	func testOtpauthUrisEncodedLikeCore() throws {
+		for vector in v["authenticator"]!["uris"]!.arrayValue! {
+			let p = vector["params"]!
+			let params = TotpParams(
+				secret: try base32Decode(p["secret"]!.stringValue!),
+				algorithm: TotpAlgorithm(rawValue: p["algorithm"]!.stringValue!)!,
+				digits: p["digits"]!.intValue!,
+				period: p["period"]!.intValue!,
+				issuer: p["issuer"]!.stringValue!,
+				account: p["account"]!.stringValue!
+			)
+			let uri = buildOtpauthUri(params)
+			XCTAssertEqual(uri, vector["uri"]?.stringValue)
+			XCTAssertEqual(try parseTotp(uri), params)
+		}
+	}
+
+	func testAuthenticatorPlan() throws {
+		let plan = v["authenticator"]!["plan"]!
+		let items = try plan["items"]!.arrayValue!.map { (id: $0["id"]!.stringValue!, item: try Item(json: $0["item"]!)) }
+		let entries = plan["entries"]!.arrayValue!.map {
+			AuthenticatorEntry(totp: $0["totp"]!.stringValue!, issuer: $0["issuer"]!.stringValue!, account: $0["account"]!.stringValue!)
+		}
+		let rows = planAuthenticatorImport(entries, items: items)
+		XCTAssertEqual(rows.map(\.action.rawValue), plan["rows"]!.arrayValue!.map { $0["action"]!.stringValue! })
+		XCTAssertEqual(rows.map(\.itemId), plan["rows"]!.arrayValue!.map { $0["itemId"]!.stringValue })
+		XCTAssertEqual(rows.map(\.selected), plan["rows"]!.arrayValue!.map { $0["selected"]!.boolValue! })
+	}
+
 	func testWordlist() {
 		XCTAssertEqual(effLargeWordlist.count, v["wordlist"]?["count"]?.intValue)
 		XCTAssertEqual(effLargeWordlist.first, v["wordlist"]?["first"]?.stringValue)

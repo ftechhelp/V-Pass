@@ -90,6 +90,11 @@
 					{{ saveLabel }}
 				</button>
 			</template>
+
+			<p class="small muted moving">
+				Moving from Google Authenticator or another app?
+				<button class="btn link" data-test="open-import" @click="send('openImport')">Import 2FA codes</button>
+			</p>
 		</div>
 	</div>
 </template>
@@ -289,5 +294,9 @@ onMounted(runScan)
 
 .empty {
 	padding: 8px 10px;
+}
+
+.moving {
+	margin-top: 8px;
 }
 </style>

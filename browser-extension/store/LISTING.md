@@ -51,6 +51,7 @@ V-Pass is a zero-knowledge password manager that runs on your own Nextcloud. Thi
 • Generate strong passwords and passphrases
 • Fill two-factor (TOTP) codes, payment cards and addresses
 • Set up two-factor codes by scanning the QR code a site shows, right from the toolbar button
+• Move your two-factor codes over from Google Authenticator, Aegis, 2FAS and other authenticator apps
 • Create and use passkeys stored in your vault, on any computer, or hand the request to your phone or security key
 
 Your vault stays yours

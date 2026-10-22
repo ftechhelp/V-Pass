@@ -13,7 +13,7 @@ import type { Settings } from './settings.ts'
  * every secret; pages and content scripts ask it for exactly what they need.
  *
  * Trust rules (enforced in background/router.ts):
- * - Full-access pages (popup, options, prompt) may send any `UiMessages`.
+ * - Full-access pages (popup, options, prompt, import) may send any `UiMessages`.
  * - The in-page iframes (inline menu, notification bar) may only send their
  *   token-scoped messages.
  * - Content scripts may only send `ContentMessages`; their origin is always
@@ -75,6 +75,15 @@ export interface TotpScan {
 export type TotpTarget =
 	| { itemId: string }
 	| { newLogin: { title: string, username: string, url: string | null } }
+
+/** A code moved over from another authenticator app: into a login, or (no itemId) as a new login. */
+export interface TotpImportCode {
+	/** otpauth://totp/… link. */
+	totp: string
+	issuer: string
+	account: string
+	itemId: string | null
+}
 
 /* ---------- autofill ---------- */
 
@@ -209,6 +218,9 @@ export interface UiMessages {
 	scanQr: [object, TotpScan]
 	/** `totp`: an otpauth:// link or a bare key. */
 	saveTotp: [{ totp: string, into: TotpTarget }, { itemId: string }]
+	/** Store codes from another authenticator app (the import page). */
+	importTotp: [{ codes: TotpImportCode[] }, { saved: number }]
+	openImport: [object, void]
 	copied: [object, void]
 	generate: [object, string]
 	/** Fill a generated password into the page's focused password field. */

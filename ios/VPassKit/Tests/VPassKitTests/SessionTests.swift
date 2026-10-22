@@ -255,4 +255,21 @@ final class DemoVaultTests: XCTestCase {
 		XCTAssertEqual(Set(snapshot.activeItems.map { itemDisplayTitle($0.item) }), ["GitHub", "Bank", "Wi-Fi", "Visa", "Personal"])
 		XCTAssertEqual(snapshot.folders.map(\.name), ["Work"])
 	}
+
+	/// What the UI test of the import expects to see.
+	func testDemoGoogleAuthenticatorExport() async throws {
+		let server = try await DemoVault.makeServer()
+		let session = VaultSession(api: VPassAPI(transport: server), store: MemoryVaultStore())
+		try await session.sync()
+		try await session.unlock(password: DemoVault.masterPassword)
+		let snapshot = try await session.snapshot()
+		var collected = AuthenticatorImport()
+		try collected.add(DemoVault.googleAuthenticatorExport)
+		XCTAssertEqual(collected.progress?.total, 1)
+		let rows = planAuthenticatorImport(collected.entries, items: snapshot.items)
+		let title = { (id: String?) in snapshot.items.first { $0.id == id }.map { itemDisplayTitle($0.item) } }
+		XCTAssertEqual(rows.map(\.action), [.exists, .add, .new])
+		XCTAssertEqual(rows.map { title($0.itemId) }, ["GitHub", "Bank", nil])
+		XCTAssertEqual(rows.map(\.entry.issuer), ["GitHub", "Bank", "Example"])
+	}
 }

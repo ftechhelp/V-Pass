@@ -75,22 +75,81 @@ private func parseOtpauthUri(_ uri: String) throws -> TotpParams {
 		labelIssuer = ""
 		labelAccount = label
 	}
-	let algorithmName = (param("algorithm") ?? "SHA1").uppercased()
+	return try totpParams(
+		secret: secret,
+		algorithm: param("algorithm"),
+		digits: jsNumber(param("digits") ?? "6"),
+		period: jsNumber(param("period") ?? "30"),
+		issuer: param("issuer") ?? labelIssuer,
+		account: labelAccount.trimmingCharacters(in: .whitespacesAndNewlines)
+	)
+}
+
+/// `Number(text)` for the strings these fields hold: NaN when it isn't a number.
+func jsNumber(_ text: String) -> Double {
+	let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+	return trimmed.isEmpty ? 0 : Double(trimmed) ?? .nan
+}
+
+/// Check the parts of a TOTP setup, as otpauth:// links and other apps' exports
+/// hold them (`totpParamsFrom`): the same rules as an otpauth:// link.
+public func totpParams(secret: String, algorithm: String? = nil, digits: Double? = nil, period: Double? = nil, issuer: String = "", account: String = "") throws -> TotpParams {
+	let algorithmName = (algorithm ?? "SHA1").uppercased()
 	guard let algorithm = TotpAlgorithm(rawValue: algorithmName) else {
 		throw InvalidTotpError("Unsupported algorithm \(algorithmName)")
 	}
-	guard let digits = Int(param("digits") ?? "6"), [6, 7, 8].contains(digits),
-		let period = Int(param("period") ?? "30"), period >= 1, period <= 300 else {
+	let digits = digits ?? 6
+	let period = period ?? 30
+	guard [6.0, 7.0, 8.0].contains(digits), period.isFinite, period.rounded() == period, period >= 1, period <= 300 else {
 		throw InvalidTotpError("Unsupported digits or period")
 	}
 	return TotpParams(
 		secret: try decodeSecret(secret),
 		algorithm: algorithm,
-		digits: digits,
-		period: period,
-		issuer: param("issuer") ?? labelIssuer,
-		account: labelAccount.trimmingCharacters(in: .whitespacesAndNewlines)
+		digits: Int(digits),
+		period: Int(period),
+		issuer: issuer,
+		account: account
 	)
+}
+
+/// The otpauth:// link for a key (`buildOtpauthUri`), encoded exactly as JavaScript does it.
+public func buildOtpauthUri(_ params: TotpParams) -> String {
+	let label = encodeURIComponent(params.issuer.isEmpty ? params.account : "\(params.issuer):\(params.account)")
+	var query = [("secret", base32Encode(params.secret))]
+	if !params.issuer.isEmpty { query.append(("issuer", params.issuer)) }
+	if params.algorithm != .sha1 { query.append(("algorithm", params.algorithm.rawValue)) }
+	if params.digits != 6 { query.append(("digits", String(params.digits))) }
+	if params.period != 30 { query.append(("period", String(params.period))) }
+	return "otpauth://totp/\(label)?" + query.map { "\(formEncode($0.0))=\(formEncode($0.1))" }.joined(separator: "&")
+}
+
+private func percentEncode(_ text: String, keeping keep: (UInt8) -> Bool, spaceAsPlus: Bool = false) -> String {
+	var out = ""
+	for byte in text.utf8 {
+		if keep(byte) {
+			out.append(Character(Unicode.Scalar(byte)))
+		} else if spaceAsPlus && byte == 0x20 {
+			out.append("+")
+		} else {
+			out += String(format: "%%%02X", byte)
+		}
+	}
+	return out
+}
+
+private func isAlphanumeric(_ byte: UInt8) -> Bool {
+	(byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A)
+}
+
+/// JavaScript's `encodeURIComponent`: keeps A–Z a–z 0–9 - _ . ! ~ * ' ( )
+func encodeURIComponent(_ text: String) -> String {
+	percentEncode(text) { isAlphanumeric($0) || Array("-_.!~*'()".utf8).contains($0) }
+}
+
+/// `URLSearchParams` serialisation (application/x-www-form-urlencoded): keeps A–Z a–z 0–9 * - . _ and writes spaces as "+".
+func formEncode(_ text: String) -> String {
+	percentEncode(text, keeping: { isAlphanumeric($0) || Array("*-._".utf8).contains($0) }, spaceAsPlus: true)
 }
 
 public func hotp(secret: Bytes, counter: UInt64, algorithm: TotpAlgorithm = .sha1, digits: Int = 6) -> String {

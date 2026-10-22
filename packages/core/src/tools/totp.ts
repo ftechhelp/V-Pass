@@ -58,11 +58,39 @@ function parseOtpauthUri(uri: string): TotpParams {
 	if (!secret) {
 		throw new InvalidTotpError('The link has no secret')
 	}
-	const label = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+	let label: string
+	try {
+		label = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+	} catch {
+		throw new InvalidTotpError()
+	}
 	const [labelIssuer, labelAccount] = label.includes(':') ? label.split(/:(.*)/s) : ['', label]
-	const algorithm = (url.searchParams.get('algorithm') ?? 'SHA1').toUpperCase()
-	const digits = Number(url.searchParams.get('digits') ?? 6)
-	const period = Number(url.searchParams.get('period') ?? 30)
+	return totpParamsFrom({
+		secret,
+		algorithm: url.searchParams.get('algorithm') ?? undefined,
+		digits: Number(url.searchParams.get('digits') ?? 6),
+		period: Number(url.searchParams.get('period') ?? 30),
+		issuer: url.searchParams.get('issuer') ?? labelIssuer ?? '',
+		account: (labelAccount ?? '').trim(),
+	})
+}
+
+/** The parts of a TOTP setup, as otpauth:// links and other apps' exports hold them. */
+export interface TotpFields {
+	/** Base32 key. */
+	secret: string
+	algorithm?: string
+	digits?: number
+	period?: number
+	issuer?: string
+	account?: string
+}
+
+/** Check the parts of a TOTP setup: the same rules as an otpauth:// link. */
+export function totpParamsFrom(fields: TotpFields): TotpParams {
+	const algorithm = (fields.algorithm ?? 'SHA1').toUpperCase()
+	const digits = fields.digits ?? 6
+	const period = fields.period ?? 30
 	if (!['SHA1', 'SHA256', 'SHA512'].includes(algorithm)) {
 		throw new InvalidTotpError(`Unsupported algorithm ${algorithm}`)
 	}
@@ -70,12 +98,12 @@ function parseOtpauthUri(uri: string): TotpParams {
 		throw new InvalidTotpError('Unsupported digits or period')
 	}
 	return {
-		secret: decodeSecret(secret),
+		secret: decodeSecret(fields.secret),
 		algorithm: algorithm as TotpAlgorithm,
 		digits,
 		period,
-		issuer: url.searchParams.get('issuer') ?? labelIssuer ?? '',
-		account: (labelAccount ?? '').trim(),
+		issuer: fields.issuer ?? '',
+		account: fields.account ?? '',
 	}
 }
 

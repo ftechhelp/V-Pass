@@ -92,6 +92,14 @@
 			</p>
 		</section>
 
+		<section v-if="state?.server" class="card stack">
+			<h2>2FA codes</h2>
+			<p class="small muted">
+				Move your one-time codes from Google Authenticator, Aegis, 2FAS, Ente Auth or Bitwarden Authenticator into your logins.
+			</p>
+			<div><button class="btn" data-test="open-import" @click="send('openImport')">Import 2FA codes</button></div>
+		</section>
+
 		<p class="muted small about">V-Pass {{ version }} · end-to-end encrypted: your master password and vault key never leave this browser.</p>
 	</div>
 </template>

@@ -345,6 +345,52 @@ final class ToolTests: XCTestCase {
 		XCTAssertNil(firstTotp(in: []))
 	}
 
+	func testCollectsCodesFromSeveralScans() throws {
+		// Two Google Authenticator codes of a three-code export (batch 99), as core's test helper builds them.
+		func link(_ payload: Bytes) -> String {
+			"otpauth-migration://offline?data=" + Data(payload).base64EncodedString().addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+		}
+		func account(_ secret: String, _ name: String, _ issuer: String, type: UInt8 = 2) throws -> Bytes {
+			let key = try base32Decode(secret)
+			var fields: Bytes = [0x0A, UInt8(key.count)]
+			fields += key
+			fields += [0x12, UInt8(name.utf8.count)]
+			fields += Bytes(name.utf8)
+			fields += [0x1A, UInt8(issuer.utf8.count)]
+			fields += Bytes(issuer.utf8)
+			fields += [0x20, 1, 0x28, 1, 0x30, type]
+			return [0x0A, UInt8(fields.count)] + fields
+		}
+		let batch: (UInt8) -> Bytes = { index in [0x10, 1, 0x18, 3, 0x20, index, 0x28, 99] }
+		let first = link(try account("JBSWY3DPEHPK3PXP", "a", "A") + account("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "b", "B") + batch(0))
+		let third = link(try account("MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U", "c", "C", type: 1) + batch(2))
+
+		var collected = AuthenticatorImport()
+		XCTAssertNil(collected.progress)
+		XCTAssertEqual(try collected.add(first), AuthenticatorAddResult(added: 2, skipped: 0, repeated: false))
+		XCTAssertEqual(collected.progress?.scanned, 1)
+		XCTAssertEqual(collected.progress?.total, 3)
+		XCTAssertEqual(try collected.add(" \(first)\n"), AuthenticatorAddResult(added: 0, skipped: 0, repeated: true))
+		XCTAssertEqual(try collected.add("otpauth://totp/Other:label?secret=JBSWY3DPEHPK3PXP"), AuthenticatorAddResult(added: 0, skipped: 0, repeated: false))
+		XCTAssertEqual(try collected.add(third), AuthenticatorAddResult(added: 0, skipped: 1, repeated: false))
+		XCTAssertEqual(collected.progress?.scanned, 2)
+		XCTAssertEqual(collected.entries.map(\.issuer), ["A", "B"])
+		XCTAssertEqual(collected.skipped.map(\.issuer), ["C"])
+		XCTAssertThrowsError(try collected.add("not a code"))
+		XCTAssertTrue(isGoogleAuthenticatorExport(first))
+		XCTAssertNil(firstTotp(in: [first]))
+	}
+
+	func testNewLoginForAnImportedCode() {
+		let entry = AuthenticatorEntry(totp: "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP", issuer: "", account: "alice@example.com")
+		let item = newLoginForAuthenticatorEntry(entry)
+		XCTAssertEqual(item.type, .login)
+		XCTAssertEqual(item.title, "alice@example.com")
+		XCTAssertEqual(item.username, "alice@example.com")
+		XCTAssertEqual(item.totp, entry.totp)
+		XCTAssertEqual(newLoginForAuthenticatorEntry(AuthenticatorEntry(totp: entry.totp, issuer: "", account: "")).title, "One-time code")
+	}
+
 	func testMatchLoginsOrder() throws {
 		func login(_ title: String, _ urls: [String]) throws -> Item {
 			var item = Item.new(.login)
@@ -381,6 +427,22 @@ final class QRImageTests: XCTestCase {
 		XCTAssertEqual(qrPayloads(inImageData: png), [uri])
 		XCTAssertEqual(firstTotp(in: qrPayloads(inImageData: png)), uri)
 		XCTAssertEqual(qrPayloads(inImageData: Data("not an image".utf8)), [])
+	}
+
+	func testReadsGoogleAuthenticatorExportFromAnImage() throws {
+		let link = "otpauth-migration://offline?data=CjEKCkhlbGxvId6tvu8SGEV4YW1wbGU6YWxpY2VAZ29vZ2xlLmNvbRoHRXhhbXBsZTAC"
+		let generator = try XCTUnwrap(CIFilter(name: "CIQRCodeGenerator"))
+		generator.setValue(Data(link.utf8), forKey: "inputMessage")
+		let code = try XCTUnwrap(generator.outputImage).transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+		let page = CIImage(color: CIColor(red: 1, green: 1, blue: 1)).cropped(to: code.extent.insetBy(dx: -80, dy: -80))
+		let sRGB = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+		let png = try XCTUnwrap(CIContext().pngRepresentation(of: code.composited(over: page), format: .RGBA8, colorSpace: sRGB, options: [:]))
+
+		var collected = AuthenticatorImport()
+		for payload in qrPayloads(inImageData: png) {
+			try collected.add(payload)
+		}
+		XCTAssertEqual(collected.entries.map(\.account), ["alice@google.com"])
 	}
 }
 #endif
