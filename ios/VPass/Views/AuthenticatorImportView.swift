@@ -393,8 +393,13 @@ struct AuthenticatorImportView: View {
 
 	private var done: some View {
 		ContentUnavailableView {
-			Label(saved == 1 ? "1 code was imported" : "\(saved) codes were imported", systemImage: "checkmark.circle")
-				.accessibilityIdentifier("otp-done")
+			Label {
+				// On the text only: the symbol's own accessibility label is "Selected".
+				Text(saved == 1 ? "1 code was imported" : "\(saved) codes were imported")
+					.accessibilityIdentifier("otp-done")
+			} icon: {
+				Image(systemName: "checkmark.circle")
+			}
 		} description: {
 			Text("Delete the screenshots of the QR codes from Photos now, and any export files: they aren't encrypted. Keep the codes in your old app until you have signed in with a few of them from V-Pass.")
 		} actions: {
