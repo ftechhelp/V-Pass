@@ -37,6 +37,10 @@ lint-php: ## php -l every PHP file (in Docker)
 test-php: ## PHP unit tests (in Docker)
 	docker run --rm -v $(CURDIR)/$(APP_DIR):/app -w /app $(PHP_IMAGE) vendor/bin/phpunit -c tests/phpunit.xml
 
+.PHONY: test-runtime
+test-runtime: ## Require the fixed PHP runtime in the running dev container
+	sh dev/check-php-runtime.sh
+
 dev-up: build ## Start Nextcloud 35 on http://localhost:8080 with V-Pass enabled
 	$(COMPOSE) up -d
 	./dev/setup.sh

@@ -155,6 +155,17 @@ Dev users:
 
 `localhost` counts as a secure context, so passkeys work locally.
 
+### PHP runtime security
+
+The dev image is pinned to a tested Nextcloud 35.0.2 Apache digest with
+**PHP 8.5.12**, fixing [CVE-2026-109618 and CVE-2026-109619](https://www.php.net/archive/2026.php#2026-10-21-5).
+The Nextcloud application version alone does not identify its bundled PHP patch level.
+When advancing the image, verify PHP in an isolated candidate first, preserve the
+existing data, recreate the dev web container, and run `make test-runtime`.
+Pulling an image without recreating the container does not patch a running service.
+Do not change back to a mutable tag or reset the dev volumes to apply an update.
+This pin affects only the dev stack, not the owner's production app package or iOS release.
+
 ### Tests
 
 | Command | What it covers |
