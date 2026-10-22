@@ -1,6 +1,6 @@
 {
   "name": "vpass-browser-extension",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "V-Pass for Chrome: autofill, save prompts and passkeys for a V-Pass vault on Nextcloud.",
   "license": "AGPL-3.0-or-later",

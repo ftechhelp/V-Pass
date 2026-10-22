@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "V-Pass",
   "description": "Autofill, save prompts and passkeys for your end-to-end encrypted V-Pass vault on Nextcloud.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "homepage_url": "https://github.com/ftechhelp/V-Pass",
   "minimum_chrome_version": "120",
   "icons": {

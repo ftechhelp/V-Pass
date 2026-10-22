@@ -105,6 +105,32 @@ final class VPassUITests: XCTestCase {
 		XCTAssertTrue(element(app, "totp-code").exists)
 	}
 
+	/// The "2FA codes" category lists every login's code like an authenticator app:
+	/// a tap copies the code, the info button opens the login.
+	func testCodesList() {
+		let app = launch()
+		unlock(app)
+		// From "All items" back to the sidebar.
+		let back = app.navigationBars.buttons["V-Pass"]
+		XCTAssertTrue(back.waitForExistence(timeout: 10))
+		back.tap()
+		let category = element(app, "category-2FA codes")
+		XCTAssertTrue(category.waitForExistence(timeout: 10))
+		category.tap()
+
+		let github = app.buttons["code-GitHub"]
+		XCTAssertTrue(github.waitForExistence(timeout: 10))
+		XCTAssertTrue(github.label.hasPrefix("GitHub, octocat, code "), github.label)
+		XCTAssertFalse(app.buttons["code-Bank"].exists, "the demo Bank login has no code")
+		github.tap()
+		XCTAssertTrue(element(app, "banner").waitForExistence(timeout: 5))
+
+		element(app, "code-open-GitHub").tap()
+		let username = element(app, "value-Username")
+		XCTAssertTrue(username.waitForExistence(timeout: 10))
+		XCTAssertEqual(username.label, "octocat")
+	}
+
 	/// "Simulate scan" adds DemoVault.googleAuthenticatorExport: GitHub's code (already
 	/// in the vault), one for the Bank login and one that becomes a new login.
 	func testImportFromGoogleAuthenticator() {

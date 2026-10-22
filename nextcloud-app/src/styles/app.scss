@@ -8,6 +8,8 @@
 
 	&--wide {
 		max-width: 980px;
+		// Wide pages reach the content's edge: keep clear of the navigation toggle there.
+		padding-inline-start: 56px;
 	}
 
 	&__title {

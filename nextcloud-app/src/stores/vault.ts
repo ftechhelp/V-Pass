@@ -9,6 +9,7 @@ import {
 	type ItemRecord,
 	type SyncResponse,
 	ConflictError,
+	codeEntries,
 	createBackup,
 	decryptAttachmentContent,
 	decryptAttachmentMeta,
@@ -86,6 +87,9 @@ export const useVaultStore = defineStore('vault', () => {
 		}
 		return result
 	})
+
+	/** Every login's one-time code, for the "2FA codes" page. */
+	const codes = computed(() => codeEntries(active.value))
 
 	const folderCounts = computed(() => {
 		const result = new Map<string, number>()
@@ -431,6 +435,7 @@ export const useVaultStore = defineStore('vault', () => {
 		trashed,
 		folderList,
 		counts,
+		codes,
 		folderCounts,
 		filter,
 		attachmentsFor,

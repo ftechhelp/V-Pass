@@ -314,6 +314,23 @@ test('imports 2FA codes from Google Authenticator (camera and screenshot), an ex
 	expect(logins.some((l) => l.title === 'Woodgrove')).toBe(false)
 	expect(logins.filter((l) => l.title === 'Test site')).toHaveLength(1)
 	await page.close()
+
+	// The popup's "2FA codes" tab lists them like an authenticator app; a click copies the code.
+	const codesPopup = await openPopup(h)
+	await codesPopup.locator('[data-test="tab-codes"]').click()
+	const codes = codesPopup.locator('[data-test="codes-list"]')
+	for (const name of ['Contoso', 'Fabrikam', 'Northwind', 'Test site']) {
+		await expect(codes.locator(`[data-test="code-${name}"] [data-test="code-value"]`)).toHaveText(/^\d{3} \d{3}$/)
+	}
+	await expect(codes.locator('[data-test="code-Woodgrove"]')).toHaveCount(0)
+	await codesPopup.locator('[data-test="codes-search"]').fill('fabri')
+	await expect(codes.locator('li')).toHaveCount(1)
+	await codes.locator('[data-test="code-Fabrikam"] [data-test="code-value"]').click()
+	// Shown only once the clipboard took the code.
+	await expect(codes.locator('[data-test="code-copied"]')).toBeVisible()
+	await codes.locator('[data-test="code-open"]').click()
+	await expect(codesPopup.locator('[data-test="totp-code"]')).toHaveText(/^\d{3} \d{3}$/)
+	await codesPopup.close()
 })
 
 test('locks, offers to unlock in the field, and "keep unlocked" survives a browser restart', async ({ harness: h }) => {

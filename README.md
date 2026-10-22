@@ -8,11 +8,11 @@ A zero-knowledge password manager that runs as an app inside your own Nextcloud.
   - a password and passphrase generator
   - password health (weak, reused and old passwords)
   - a breach check against Have I Been Pwned, using k-anonymity
-  - built-in 2FA (TOTP) codes, set up by scanning the site's QR code
+  - built-in 2FA (TOTP) codes, set up by scanning the site's QR code, with a *2FA codes* list of all of them, like an authenticator app
   - encrypted file attachments
 - **Import and export:** import from NordPass, and move 2FA codes over from Google Authenticator, Aegis, 2FAS, Ente Auth, Bitwarden Authenticator or anything that shows `otpauth://` links (in the web app, the extension and the iPhone app). Export to an encrypted `.vpass` backup or to CSV.
-- **Chrome extension:** fills logins, one-time codes, cards and addresses; offers to save new logins and changed passwords; generates passwords; sets up 2FA codes from the QR code a site shows, or imports them from another authenticator app; and stores and uses website passkeys from the vault.
-- **iPhone app:** browse, search, copy and edit the vault, scan 2FA QR codes, import 2FA codes from another authenticator app, unlock with Face ID, and fill passwords, 2FA codes and passkeys in Safari and other apps through iOS AutoFill.
+- **Chrome extension:** fills logins, one-time codes, cards and addresses; lists every 2FA code in the popup's *2FA codes* tab; offers to save new logins and changed passwords; generates passwords; sets up 2FA codes from the QR code a site shows, or imports them from another authenticator app; and stores and uses website passkeys from the vault.
+- **iPhone app:** browse, search, copy and edit the vault, see every 2FA code in the *2FA codes* list, scan 2FA QR codes, import 2FA codes from another authenticator app, unlock with Face ID, and fill passwords, 2FA codes and passkeys in Safari and other apps through iOS AutoFill.
 
 ## Security model
 
@@ -226,6 +226,8 @@ Each V-Pass client can import one-time codes: *Import & export → 2FA codes fro
 | Microsoft Authenticator | It can't export its codes. Set up two-factor authentication again on each site and scan the new QR code in V-Pass. |
 
 Before saving, a review list shows where each code goes: into the login for the same service and username, into the only login for that service if it has no code yet, or into a new login. Codes already in V-Pass are left alone, and a code that would replace a different one is only imported if you tick it. Counter-based (HOTP), Steam and MD5 codes are listed as not supported. Delete the screenshots and export files afterwards: they aren't encrypted.
+
+Afterwards, every code is in the *2FA codes* list (sidebar in the web app and on the iPhone, a tab in the extension popup). Click or tap a code to copy it. Codes that became new logins have no website yet, so autofill can't offer them on the site; add the site's address to the login (or move the code into your existing login for that site).
 
 ## API (for the extension and desktop client)
 

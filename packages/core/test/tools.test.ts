@@ -8,6 +8,7 @@ import {
 	buildOtpauthUri,
 	checkBreaches,
 	checkStrength,
+	codeEntries,
 	generatePassphrase,
 	generatePassword,
 	hotp,
@@ -144,6 +145,36 @@ describe('reading authenticator QR codes', () => {
 	it('reports an image without a QR code', async () => {
 		const blank = { data: new Uint8ClampedArray(64 * 64 * 4).fill(255), width: 64, height: 64 }
 		await expect(readTotpQr(blank)).rejects.toThrow(NoQrCodeError)
+	})
+})
+
+describe('the 2FA codes list', () => {
+	const KEY = 'JBSWY3DPEHPK3PXP'
+	const items = [
+		{ id: 'b', item: newItem('login', { title: 'GitHub', username: 'octocat', totp: `otpauth://totp/GitHub:octocat?secret=${KEY}&issuer=GitHub` }) },
+		{ id: 'a', item: newItem('login', { title: 'github', username: 'Hubber', totp: KEY }) },
+		{ id: 'c', item: newItem('login', { title: '', username: '', urls: ['https://bank.example.com'], totp: `otpauth://totp/Bank:me?secret=${KEY}&issuer=Bank` }) },
+		{ id: 'd', item: newItem('login', { title: '', username: '', urls: ['https://shop.example.com'], totp: KEY }) },
+		{ id: 'e', item: newItem('login', { title: 'Plain', username: 'p', password: 'x' }) },
+		{ id: 'f', item: newItem('login', { title: 'Broken', totp: 'not a key' }) },
+		{ id: 'g', item: newItem('note', { title: 'Note' }) },
+		{ id: 'h', item: newItem('login', { title: 'Self', username: 'Self', totp: KEY }) },
+	]
+
+	it('lists every login with a valid code, sorted by name and account', () => {
+		expect(codeEntries(items).map(({ id, name, account }) => ({ id, name, account }))).toEqual([
+			{ id: 'c', name: 'Bank', account: 'me' },
+			{ id: 'a', name: 'github', account: 'Hubber' },
+			{ id: 'b', name: 'GitHub', account: 'octocat' },
+			{ id: 'h', name: 'Self', account: '' },
+			{ id: 'd', name: 'shop.example.com', account: '' },
+		])
+	})
+
+	it('filters by every word of the search', () => {
+		expect(codeEntries(items, 'git OCTO').map((e) => e.id)).toEqual(['b'])
+		expect(codeEntries(items, '  ').length).toBe(5)
+		expect(codeEntries(items, 'nothing')).toEqual([])
 	})
 })
 

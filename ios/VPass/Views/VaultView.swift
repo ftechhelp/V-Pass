@@ -2,7 +2,7 @@ import SwiftUI
 import VPassKit
 
 enum VaultCategory: Hashable {
-	case all, favorites, logins, passkeys, notes, cards, identities, trash
+	case all, favorites, logins, passkeys, codes, notes, cards, identities, trash
 	case folder(String)
 
 	var title: String {
@@ -11,6 +11,7 @@ enum VaultCategory: Hashable {
 		case .favorites: "Favorites"
 		case .logins: "Logins"
 		case .passkeys: "Passkeys"
+		case .codes: "2FA codes"
 		case .notes: "Secure notes"
 		case .cards: "Credit cards"
 		case .identities: "Personal info"
@@ -25,6 +26,7 @@ enum VaultCategory: Hashable {
 		case .favorites: "star"
 		case .logins: "key"
 		case .passkeys: "person.badge.key"
+		case .codes: "123.rectangle"
 		case .notes: "note.text"
 		case .cards: "creditcard"
 		case .identities: "person.text.rectangle"
@@ -46,6 +48,7 @@ enum VaultCategory: Hashable {
 		case .favorites: return item.favorite
 		case .logins: return item.type == .login
 		case .passkeys: return item.type == .login && !item.passkeys.isEmpty
+		case .codes: return item.type == .login && (try? parseTotp(item.totp)) != nil
 		case .notes: return item.type == .note
 		case .cards: return item.type == .card
 		case .identities: return item.type == .identity
@@ -68,8 +71,17 @@ struct VaultView: View {
 				.navigationTitle("V-Pass")
 				.toolbar { toolbar }
 		} content: {
-			ItemListView(category: category ?? .all, selection: $selection)
+			if category == .codes {
+				CodesListView { id in
+					// Tapping a code copies it; its info button opens the login.
+					selection = id
+					compactColumn = .detail
+				}
 				.toolbar { toolbar }
+			} else {
+				ItemListView(category: category ?? .all, selection: $selection)
+					.toolbar { toolbar }
+			}
 		} detail: {
 			if let selection, model.item(selection) != nil {
 				ItemDetailView(id: selection)
@@ -128,7 +140,7 @@ private struct SidebarView: View {
 	@Environment(AppModel.self) private var model
 	@Binding var selection: VaultCategory?
 
-	private let fixed: [VaultCategory] = [.all, .favorites, .logins, .passkeys, .notes, .cards, .identities]
+	private let fixed: [VaultCategory] = [.all, .favorites, .logins, .passkeys, .codes, .notes, .cards, .identities]
 
 	var body: some View {
 		List(selection: $selection) {
@@ -161,6 +173,7 @@ private struct SidebarView: View {
 					.font(.subheadline)
 			}
 		}
+		.accessibilityIdentifier("category-\(title)")
 	}
 
 	private func count(_ category: VaultCategory) -> Int {

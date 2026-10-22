@@ -71,6 +71,26 @@ struct ItemRow: View {
 }
 
 /// A live TOTP code with a countdown ring.
+/// Seconds left of a one-time code, as a ring that runs down and turns red at the end.
+struct TotpRing: View {
+	let code: TotpCode
+
+	var body: some View {
+		ZStack {
+			Circle().stroke(.quaternary, lineWidth: 3)
+			Circle()
+				.trim(from: 0, to: CGFloat(code.remaining) / CGFloat(code.period))
+				.stroke(code.remaining <= 5 ? Color.red : Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+				.rotationEffect(.degrees(-90))
+			Text("\(code.remaining)")
+				.font(.caption2.monospacedDigit())
+		}
+		.frame(width: 28, height: 28)
+		.accessibilityElement(children: .ignore)
+		.accessibilityLabel("\(code.remaining) seconds left")
+	}
+}
+
 struct TotpCodeView: View {
 	let secret: String
 	var onCopy: ((String) -> Void)?
@@ -84,17 +104,7 @@ struct TotpCodeView: View {
 						.font(.system(.title2, design: .monospaced).weight(.semibold))
 						.accessibilityIdentifier("totp-code")
 					Spacer()
-					ZStack {
-						Circle().stroke(.quaternary, lineWidth: 3)
-						Circle()
-							.trim(from: 0, to: CGFloat(code.remaining) / CGFloat(code.period))
-							.stroke(code.remaining <= 5 ? Color.red : Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-							.rotationEffect(.degrees(-90))
-						Text("\(code.remaining)")
-							.font(.caption2.monospacedDigit())
-					}
-					.frame(width: 28, height: 28)
-					.accessibilityLabel("\(code.remaining) seconds left")
+					TotpRing(code: code)
 					if let onCopy {
 						Button {
 							onCopy(code.code)

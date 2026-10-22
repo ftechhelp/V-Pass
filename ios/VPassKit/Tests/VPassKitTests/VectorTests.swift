@@ -249,6 +249,19 @@ final class VectorTests: XCTestCase {
 		XCTAssertEqual(rows.map(\.selected), plan["rows"]!.arrayValue!.map { $0["selected"]!.boolValue! })
 	}
 
+	func testCodesList() throws {
+		let codes = v["codes"]!
+		let items = try codes["items"]!.arrayValue!.map { (id: $0["id"]!.stringValue!, item: try Item(json: $0["item"]!)) }
+		for list in codes["lists"]!.arrayValue! {
+			let query = list["query"]!.stringValue!
+			let entries = codeEntries(items, query: query)
+			let expected = list["entries"]!.arrayValue!
+			XCTAssertEqual(entries.map(\.id), expected.map { $0["id"]!.stringValue! }, query)
+			XCTAssertEqual(entries.map(\.name), expected.map { $0["name"]!.stringValue! }, query)
+			XCTAssertEqual(entries.map(\.account), expected.map { $0["account"]!.stringValue! }, query)
+		}
+	}
+
 	func testWordlist() {
 		XCTAssertEqual(effLargeWordlist.count, v["wordlist"]?["count"]?.intValue)
 		XCTAssertEqual(effLargeWordlist.first, v["wordlist"]?["first"]?.stringValue)

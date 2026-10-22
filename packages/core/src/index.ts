@@ -13,6 +13,7 @@ export * from './crypto/attachments.ts'
 export * from './model/items.ts'
 export * from './model/records.ts'
 export * from './model/codec.ts'
+export * from './model/codes.ts'
 
 export * from './import/nordpass.ts'
 export * from './import/dedupe.ts'

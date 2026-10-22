@@ -10,6 +10,7 @@ import {
 	b64urlEncode,
 	base32Encode,
 	cardBrand,
+	codeEntries,
 	createCredential,
 	createVaultKeys,
 	deriveMasterKey,
@@ -198,6 +199,7 @@ test('write iOS vectors', async () => {
 
 	const vectors = {
 		authenticator: authenticatorVectors(),
+		codes: codesVectors(),
 		generatedBy: 'packages/core/scripts/ios-vectors.ts',
 		encoding: [new Uint8Array([]), new Uint8Array([0xff]), new Uint8Array([0xfb, 0xff, 0xbf]), utf8('any carnal pleas')].map((b) => ({
 			hex: hex(b), b64url: b64urlEncode(b), base32: base32Encode(b),
@@ -244,6 +246,28 @@ test('write iOS vectors', async () => {
 	writeFileSync(resolve(kit, 'Tests/VPassKitTests/Fixtures/vectors.json'), `${JSON.stringify(vectors, null, 2)}\n`)
 	writeFileSync(resolve(kit, 'Sources/VPassKit/Resources/eff-wordlist.txt'), `${EFF_LARGE_WORDLIST.join('\n')}\n`)
 })
+
+/** The "2FA codes" list: which logins it shows, their names and accounts, the order and search. */
+function codesVectors() {
+	const KEY = 'JBSWY3DPEHPK3PXP'
+	const items = [
+		{ id: 'b', item: newItem('login', { title: 'GitHub', username: 'octocat', totp: `otpauth://totp/GitHub:octocat?secret=${KEY}&issuer=GitHub` }) },
+		{ id: 'a', item: newItem('login', { title: 'github', username: 'Hubber', totp: KEY }) },
+		{ id: 'a2', item: newItem('login', { title: 'GITHUB', username: 'hubber', totp: KEY }) },
+		{ id: 'c', item: newItem('login', { title: '  ', username: ' ', urls: ['https://bank.example.com'], totp: `otpauth://totp/Bank:me?secret=${KEY}&issuer=%20Bank%20` }) },
+		{ id: 'd', item: newItem('login', { title: '', urls: ['https://shop.example.com/x'], totp: ` ${KEY} ` }) },
+		{ id: 'e', item: newItem('login', { title: 'Plain', username: 'p', password: 'x' }) },
+		{ id: 'f', item: newItem('login', { title: 'Broken', totp: 'otpauth://totp/x?secret=!!' }) },
+		{ id: 'g', item: newItem('note', { title: 'Note' }) },
+		{ id: 'h', item: newItem('login', { title: 'Self', username: 'Self', totp: KEY }) },
+		{ id: 'i', item: newItem('login', { title: '', totp: `otpauth://totp/only%20account?secret=${KEY}` }) },
+	]
+	const queries = ['', 'git', 'GIT hub', 'octo', 'bank me', 'example.com', 'only', 'zzz']
+	return {
+		items,
+		lists: queries.map((query) => ({ query, entries: codeEntries(items, query).map(({ id, name, account }) => ({ id, name, account })) })),
+	}
+}
 
 /** Other authenticator apps' exports, the otpauth:// links V-Pass writes for them, and where each code goes. */
 function authenticatorVectors() {

@@ -11,6 +11,7 @@ export const router = createRouter({
 		{ path: `/vault/:category(${CATEGORY_RE})/:itemId?`, name: 'category', component: VaultView, props: true },
 		{ path: '/folder/:folderId/:itemId?', name: 'folder', component: VaultView, props: true },
 		{ path: '/trash/:itemId?', name: 'trash', component: VaultView, props: (route) => ({ trash: true, itemId: route.params.itemId }) },
+		{ path: '/codes', name: 'codes', component: () => import('./views/CodesView.vue') },
 		{ path: '/generator', name: 'generator', component: () => import('./views/GeneratorView.vue') },
 		{ path: '/health', name: 'health', component: () => import('./views/HealthView.vue') },
 		{ path: '/import', name: 'import', component: () => import('./views/ImportExportView.vue') },

@@ -125,6 +125,7 @@
 				<p v-else class="empty muted">{{ items.length ? 'Nothing matches.' : 'Your vault is empty.' }}</p>
 			</template>
 
+			<CodesPanel v-else-if="tab === 'codes'" :items="items" @open="selected = $event" />
 			<GeneratorPanel v-else />
 		</main>
 	</div>
@@ -152,6 +153,7 @@ import SyncIcon from 'vue-material-design-icons/Sync.vue'
 import type { ExtensionState, ItemView, SiteView } from '../../shared/protocol.ts'
 import { send } from '../../shared/runtime.ts'
 import { useCopy } from '../ui/copy.ts'
+import CodesPanel from './CodesPanel.vue'
 import GeneratorPanel from './GeneratorPanel.vue'
 import ItemDetail from './ItemDetail.vue'
 import TotpSetup from './TotpSetup.vue'
@@ -159,8 +161,10 @@ import TotpSetup from './TotpSetup.vue'
 const props = defineProps<{ state: ExtensionState }>()
 const emit = defineEmits<{ update: [state: ExtensionState] }>()
 
-type Tab = 'site' | 'vault' | 'generator'
-const TABS: { id: Tab, label: string }[] = [{ id: 'site', label: 'This site' }, { id: 'vault', label: 'Vault' }, { id: 'generator', label: 'Generator' }]
+type Tab = 'site' | 'vault' | 'codes' | 'generator'
+const TABS: { id: Tab, label: string }[] = [
+	{ id: 'site', label: 'This site' }, { id: 'vault', label: 'Vault' }, { id: 'codes', label: '2FA codes' }, { id: 'generator', label: 'Generator' },
+]
 type Category = 'all' | 'login' | 'passkey' | 'note' | 'card' | 'identity' | 'favorites'
 const CATEGORIES: { id: Category, label: string }[] = [
 	{ id: 'all', label: 'All' }, { id: 'login', label: 'Logins' }, { id: 'passkey', label: 'Passkeys' }, { id: 'note', label: 'Notes' },
@@ -300,8 +304,9 @@ onMounted(() => {
 }
 
 .tab {
-	padding: 8px 10px;
+	padding: 8px;
 	border: 0;
+	white-space: nowrap;
 	border-bottom: 2px solid transparent;
 	background: none;
 	color: var(--text-muted);

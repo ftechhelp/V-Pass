@@ -145,6 +145,25 @@ test('onboarding, items, lock/unlock and NordPass import', async ({ page }) => {
 		}
 		await expect(page.getByText('Woodgrove')).toHaveCount(0)
 	})
+
+	await test.step('the 2FA codes page lists every code, searches, copies and opens the login', async () => {
+		await page.locator('[data-test="nav-codes"]').click()
+		const cards = page.locator('[data-test="codes-list"] > li')
+		await expect(cards).toHaveCount(4)
+		expect(await cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-test'))))
+			.toEqual(['code-Bank', 'code-example.org', 'code-GitHub', 'code-Northwind'])
+		for (const value of await page.locator('[data-test="code-value"]').all()) {
+			await expect(value).toHaveText(/^\d{3} \d{3}$/)
+		}
+
+		await page.locator('[data-test="codes-search"]').fill('bank')
+		await expect(cards).toHaveCount(1)
+		await cards.first().getByRole('button', { name: 'Copy the code for Bank' }).click()
+		await expect(page.getByText('Code for Bank copied').first()).toBeVisible()
+		expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^\d{6}$/)
+		await cards.first().locator('[data-test="code-open"]').click()
+		await expect(page.locator('[data-test="totp-code"]')).toHaveText(/^\d{3} \d{3}$/)
+	})
 })
 
 test('passkey unlock via WebAuthn PRF (virtual authenticator)', async ({ page, browserName }) => {

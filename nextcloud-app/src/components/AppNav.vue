@@ -1,19 +1,31 @@
 <template>
 	<NcAppNavigation :aria-label="t('vpass', 'Vault navigation')">
 		<template #list>
-			<NcAppNavigationItem v-for="category in CATEGORIES"
-				:key="category.id"
-				:name="category.label"
-				:to="{ name: 'category', params: { category: category.id } }"
-				:active="route.name === 'category' && route.params.category === category.id"
-				:data-test="`nav-${category.id}`">
-				<template #icon>
-					<component :is="category.icon" :size="20" />
-				</template>
-				<template #counter>
-					<NcCounterBubble v-if="store.counts[category.id]" :count="store.counts[category.id]" />
-				</template>
-			</NcAppNavigationItem>
+			<template v-for="category in CATEGORIES" :key="category.id">
+				<NcAppNavigationItem :name="category.label"
+					:to="{ name: 'category', params: { category: category.id } }"
+					:active="route.name === 'category' && route.params.category === category.id"
+					:data-test="`nav-${category.id}`">
+					<template #icon>
+						<component :is="category.icon" :size="20" />
+					</template>
+					<template #counter>
+						<NcCounterBubble v-if="store.counts[category.id]" :count="store.counts[category.id]" />
+					</template>
+				</NcAppNavigationItem>
+				<!-- After passkeys: every login's one-time code, like an authenticator app. -->
+				<NcAppNavigationItem v-if="category.id === 'passkey'"
+					:name="t('vpass', '2FA codes')"
+					:to="{ name: 'codes' }"
+					data-test="nav-codes">
+					<template #icon>
+						<TwoFactorIcon :size="20" />
+					</template>
+					<template #counter>
+						<NcCounterBubble v-if="store.codes.length" :count="store.codes.length" />
+					</template>
+				</NcAppNavigationItem>
+			</template>
 
 			<NcAppNavigationCaption :name="t('vpass', 'Folders')" />
 			<NcAppNavigationItem v-for="folder in store.folderList"
@@ -117,6 +129,7 @@ import ImportIcon from 'vue-material-design-icons/Import.vue'
 import LockIcon from 'vue-material-design-icons/Lock.vue'
 import PuzzleIcon from 'vue-material-design-icons/PuzzleOutline.vue'
 import ShieldCheckIcon from 'vue-material-design-icons/ShieldCheck.vue'
+import TwoFactorIcon from 'vue-material-design-icons/TwoFactorAuthentication.vue'
 import { confirmAction } from '../services/browser.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { useVaultStore } from '../stores/vault.ts'
